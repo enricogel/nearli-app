@@ -1,0 +1,3064 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AiutiAmoci v3</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+:root {
+  --bg:#0a0a0f; --surface:#13131a; --surface2:#1c1c27;
+  --accent:#f5c842; --accent2:#ff6b35; --text:#f0f0f5;
+  --muted:#6b6b80; --card:rgba(19,19,26,0.97);
+  --border:rgba(255,255,255,0.07); --green:#4ade80; --blue:#60a5fa;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);height:100dvh;overflow:hidden;}
+
+/* MAP */
+#map-container{position:absolute;inset:0;background:#0d1117;overflow:hidden;cursor:grab;touch-action:none;}
+#map-container:active{cursor:grabbing;}
+#map-canvas{position:absolute;top:0;left:0;}
+.map-markers{position:absolute;top:0;left:0;pointer-events:none;}
+.marker-bubble{background:var(--surface);border:2px solid var(--accent);border-radius:10px;padding:4px 10px;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;color:var(--accent);white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,0.6);transition:transform 0.15s;}
+.map-marker:hover .marker-bubble{transform:scale(1.08);}
+.marker-tail{width:2px;height:7px;background:var(--accent);}
+.marker-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+.user-dot{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:var(--blue);border:3px solid #fff;box-shadow:0 0 0 6px rgba(96,165,250,0.25);animation:upulse 2s infinite;pointer-events:none;z-index:130;}
+@keyframes upulse{0%,100%{box-shadow:0 0 0 4px rgba(96,165,250,0.25);}50%{box-shadow:0 0 0 10px rgba(96,165,250,0.08);}}
+
+/* TOPBAR */
+.topbar{position:fixed;top:0;left:0;right:0;z-index:100;padding:14px 18px 10px;background:linear-gradient(to bottom,rgba(10,10,15,0.85) 60%,transparent);display:flex;align-items:center;pointer-events:none;}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:21px;color:var(--accent);display:flex;align-items:center;gap:6px;flex-shrink:0;pointer-events:none;}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.5);opacity:.7;}}
+
+.avatar{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--bg);cursor:pointer;flex-shrink:0;}
+
+
+
+/* ZOOM + LOCATE */
+.zoom-controls{position:fixed;bottom:110px;left:18px;z-index:150;display:flex;flex-direction:column;gap:4px;}
+.zoom-btn{width:42px;height:42px;border-radius:13px;background:var(--surface);border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text);font-size:20px;font-weight:400;transition:transform 0.15s;user-select:none;}
+.zoom-btn:active{transform:scale(0.92);}
+.locate-btn{position:fixed;bottom:238px;right:18px;z-index:150;width:42px;height:42px;border-radius:13px;background:var(--surface);border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text);transition:transform 0.15s;}
+.locate-btn:active{transform:scale(0.92);}
+.fab{position:fixed;bottom:172px;right:18px;z-index:150;width:54px;height:54px;border-radius:17px;background:var(--accent);color:var(--bg);border:none;font-size:28px;cursor:pointer;box-shadow:0 8px 28px rgba(245,200,66,0.35);display:flex;align-items:center;justify-content:center;transition:transform 0.15s;}
+.fab:active{transform:scale(0.92);}
+
+/* ONBOARDING */
+.ob-slide{min-width:100vw;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 32px;text-align:center;}
+.ob-visual{width:220px;height:220px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:36px;flex-shrink:0;}
+.ob-tag{font-size:11px;font-weight:700;letter-spacing:1.2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px;}
+.ob-title{font-family:'Syne',sans-serif;font-weight:800;font-size:36px;line-height:1.1;color:var(--text);margin-bottom:16px;}
+.ob-body{font-size:15px;color:var(--muted);line-height:1.65;max-width:300px;}
+.ob-dot{width:7px;height:7px;border-radius:4px;background:var(--border);transition:width 0.3s,background 0.3s;}
+.ob-dot.active{width:22px;background:var(--accent);}
+</style>
+.zoom-indicator{position:fixed;bottom:300px;left:18px;z-index:150;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--muted);}
+
+/* SHEET */
+.sheet{position:fixed;bottom:0;left:0;right:0;z-index:199;background:var(--card);border:1px solid var(--border);border-radius:16px 16px 0 0;backdrop-filter:blur(24px);transition:transform 0.38s cubic-bezier(0.32,0.72,0,1);max-height:85dvh;display:flex;flex-direction:column;}
+.sheet.collapsed{transform:translateY(calc(100% - 52px - 72px));}
+.sheet.expanded{transform:translateY(0);padding-bottom:72px;}
+.sheet-handle{width:32px;height:3px;background:var(--border);border-radius:2px;margin:8px auto 0;flex-shrink:0;}
+.sheet-header{padding:8px 18px 10px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:space-between;}
+.sheet-title{font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:var(--text);}
+.sheet-content{padding:0 18px 14px;overflow-y:auto;flex:1;scrollbar-width:none;}
+.sheet-content::-webkit-scrollbar{display:none;}
+
+/* CARDS */
+.req-card{background:var(--surface2);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:10px;cursor:pointer;position:relative;overflow:hidden;transition:transform 0.15s;}
+.req-card:active{transform:scale(0.98);}
+.req-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px;}
+.req-card.cat-trasloco::before       {background:#ff6b35;}
+.req-card.cat-montaggio::before      {background:#60a5fa;}
+.req-card.cat-accompagnamento::before{background:#a78bfa;}
+.req-card.cat-informatica::before    {background:#34d399;}
+.req-card.cat-casa::before           {background:#fb923c;}
+.req-card.cat-pulizie::before        {background:#fbbf24;}
+.req-card.cat-altro::before          {background:var(--accent);}
+.req-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.req-title{font-family:'Syne',sans-serif;font-weight:600;font-size:14px;line-height:1.3;flex:1;}
+.req-price{font-family:'Syne',sans-serif;font-weight:700;font-size:15px;color:var(--accent);flex-shrink:0;}
+.req-desc{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.req-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+.meta-chip{font-size:11px;color:var(--muted);}
+.cat-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:5px;text-transform:uppercase;letter-spacing:0.4px;}
+.cat-trasloco       .cat-badge{background:rgba(255,107,53,0.15);color:#ff6b35;}
+.cat-montaggio      .cat-badge{background:rgba(96,165,250,0.15);color:#60a5fa;}
+.cat-accompagnamento.cat-badge{background:rgba(167,139,250,0.15);color:#a78bfa;}
+.cat-informatica    .cat-badge{background:rgba(52,211,153,0.15);color:#34d399;}
+.cat-casa           .cat-badge{background:rgba(251,146,60,0.15);color:#fb923c;}
+.cat-pulizie        .cat-badge{background:rgba(251,191,36,0.15);color:#fbbf24;}
+.cat-altro          .cat-badge{background:rgba(245,200,66,0.15);color:var(--accent);}
+
+/* Tag chip system */
+.tag-group{margin-bottom:13px;}
+.tag-group-label{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:0.6px;margin-bottom:7px;}
+.tag-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.tag-chip{padding:6px 12px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);
+  font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all 0.15s;white-space:nowrap;}
+.tag-chip.selected{border-color:var(--accent);background:rgba(245,200,66,0.1);color:var(--accent);font-weight:600;}
+.tag-chip:active{transform:scale(0.95);}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.72);backdrop-filter:blur(10px);display:none;align-items:flex-end;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{width:100%;max-width:480px;background:var(--surface);border-radius:22px 22px 0 0;border:1px solid var(--border);padding:0 22px 36px;max-height:91dvh;overflow-y:auto;animation:slideUp 0.32s cubic-bezier(0.32,0.72,0,1);scrollbar-width:none;}
+.modal::-webkit-scrollbar{display:none;}
+@keyframes slideUp{from{transform:translateY(100%);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.modal-handle{width:34px;height:4px;background:var(--border);border-radius:2px;margin:14px auto 18px;}
+.modal-title{font-family:'Syne',sans-serif;font-weight:800;font-size:21px;margin-bottom:4px;}
+.modal-sub{font-size:13px;color:var(--muted);margin-bottom:22px;}
+.field-wrap{margin-bottom:16px;}
+.field-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:7px;}
+.field-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--text);outline:none;transition:border-color 0.2s;}
+.field-input:focus{border-color:var(--accent);}
+.field-input::placeholder{color:var(--muted);}
+textarea.field-input{resize:none;min-height:82px;line-height:1.5;}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.price-wrap{position:relative;}
+.price-wrap .field-input{padding-left:30px;}
+.price-symbol{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--accent);font-weight:600;font-size:15px;}
+.cat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px;}
+.cat-option{background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;padding:11px;cursor:pointer;transition:all 0.2s;text-align:center;}
+.cat-option.selected{border-color:var(--accent);background:rgba(245,200,66,0.08);}
+.cat-option .emoji{font-size:20px;display:block;margin-bottom:3px;}
+.cat-option .cat-name{font-size:11px;font-weight:500;color:var(--muted);}
+.cat-option.selected .cat-name{color:var(--accent);}
+.btn-primary{width:100%;padding:15px;background:var(--accent);color:var(--bg);border:none;border-radius:14px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;transition:transform 0.15s;margin-top:6px;}
+.btn-primary:active{transform:scale(0.97);}
+.btn-ghost{width:100%;padding:13px;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-top:4px;}
+
+/* DETAIL */
+.detail-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;}
+.detail-price-big{font-family:'Syne',sans-serif;font-weight:800;font-size:30px;color:var(--accent);}
+.detail-price-sub{font-size:11px;color:var(--muted);text-align:right;margin-top:2px;}
+.escrow-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(74,222,128,0.1);color:var(--green);border:1px solid rgba(74,222,128,0.2);border-radius:8px;padding:5px 11px;font-size:11px;font-weight:600;margin-bottom:14px;}
+.detail-section{background:var(--surface2);border-radius:12px;padding:13px;margin-bottom:10px;}
+.detail-section-title{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:5px;}
+.detail-section-text{font-size:13px;line-height:1.6;}
+.detail-row{display:flex;align-items:center;gap:9px;}
+.detail-row+.detail-row{margin-top:9px;}
+.detail-icon{width:30px;height:30px;border-radius:9px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.btn-accept{width:100%;padding:15px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg);border:none;border-radius:14px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;transition:transform 0.15s;margin-top:14px;box-shadow:0 8px 22px rgba(245,200,66,0.22);}
+.btn-accept:active{transform:scale(0.97);}
+.success-screen{display:none;flex-direction:column;align-items:center;text-align:center;padding:30px 0 10px;}
+.success-screen.show{display:flex;}
+.success-icon{width:68px;height:68px;border-radius:22px;background:rgba(74,222,128,0.12);border:2px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:30px;margin-bottom:18px;animation:scaleIn 0.38s cubic-bezier(0.34,1.56,0.64,1);}
+@keyframes scaleIn{from{transform:scale(0);}to{transform:scale(1);}}
+.toast{position:fixed;top:76px;left:50%;transform:translateX(-50%) translateY(-16px);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 18px;font-size:13px;font-weight:500;z-index:600;opacity:0;transition:all 0.28s;white-space:nowrap;pointer-events:none;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.contact-opt{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border-radius:11px;background:var(--surface2);border:1.5px solid var(--border);cursor:pointer;transition:all 0.2s;}
+.contact-opt.active{border-color:var(--green);background:rgba(74,222,128,0.07);}
+.contact-check{width:20px;height:20px;border-radius:50%;background:var(--green);color:#0a0f0a;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;}
+.escrow-standby{background:linear-gradient(135deg,rgba(245,200,66,0.08),rgba(255,107,53,0.06));border:1px solid rgba(245,200,66,0.25);border-radius:14px;padding:16px;}
+.confirm-btn{width:100%;padding:14px;border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px;transition:all 0.2s;}
+.confirm-btn.done{opacity:0.5;cursor:default;background:var(--surface2)!important;color:var(--muted)!important;}
+.escrow-bar{height:6px;border-radius:99px;background:var(--surface2);overflow:hidden;margin:10px 0;}
+.escrow-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--green));transition:width 0.6s ease;}
+.time-chip{flex:1;min-width:80px;padding:8px 10px;border-radius:11px;background:var(--surface2);border:1.5px solid var(--border);cursor:pointer;font-size:12px;font-weight:500;color:var(--muted);text-align:center;transition:all 0.2s;line-height:1.4;}
+.time-chip.active{border-color:var(--blue);background:rgba(96,165,250,0.1);color:var(--blue);}
+.slot-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;margin-bottom:10px;}
+.slot-num{font-size:11px;font-weight:700;color:var(--accent);background:rgba(245,200,66,0.1);border-radius:8px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+#feedbackModal, #cancelModal { z-index:500; }
+.avail-modal{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,0.75);backdrop-filter:blur(10px);display:none;align-items:flex-end;justify-content:center;}
+.avail-modal.open{display:flex;}
+.nav-bar{position:fixed;bottom:0;left:0;right:0;z-index:1000;background:var(--card);border-top:1px solid var(--border);padding:8px 0 18px;display:flex;justify-content:space-around;backdrop-filter:blur(24px);}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 14px;cursor:pointer;opacity:0.38;transition:opacity 0.2s;font-size:9px;font-weight:500;color:var(--text);}
+.nav-item.active{opacity:1;color:var(--accent);}
+</style>
+</head>
+<body>
+
+<div id="map-container">
+  <canvas id="map-canvas"></canvas>
+  <div class="map-markers" id="markers-layer"></div>
+  <div style="position:absolute;bottom:14px;right:14px;z-index:120;background:rgba(10,15,24,0.82);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:10px;color:var(--muted);line-height:1.7;backdrop-filter:blur(8px);">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+      <div style="width:14px;height:14px;border-radius:50%;border:1.5px dashed rgba(245,200,66,0.45);background:rgba(245,200,66,0.08);flex-shrink:0;"></div>
+      <span>Zona ~1km · posizione indicativa</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(74,222,128,0.7);background:rgba(74,222,128,0.12);flex-shrink:0;"></div>
+      <span>In svolgimento</span>
+    </div>
+  </div>
+</div>
+
+<div class="user-dot" id="user-dot"></div>
+<div class="topbar">
+  <div class="logo"><div class="logo-dot"></div>AiutiAmoci</div>
+</div>
+
+<div class="zoom-controls">
+  <button class="zoom-btn" onclick="zoomIn()">+</button>
+  <button class="zoom-btn" onclick="zoomOut()">−</button>
+</div>
+<div class="zoom-indicator" id="zoom-indicator">z 1.0×</div>
+
+<button class="locate-btn" onclick="centerMap()">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+  </svg>
+</button>
+
+
+
+<div class="sheet collapsed" id="sheet">
+  <div class="sheet-handle" onclick="toggleSheet()"></div>
+  <div class="sheet-header" onclick="toggleSheet()">
+    <div class="sheet-title" id="sheet-title">6 richieste nella zona</div>
+    <div id="sheet-chevron" style="color:var(--muted);transition:transform 0.3s;font-size:20px;line-height:1;">›</div>
+  </div>
+  <div class="sheet-content" id="sheet-content"></div>
+</div>
+
+<div class="modal-overlay" id="newModal" onclick="closeNewModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Nuova Richiesta</div>
+    <div class="modal-sub">Descrivi di cosa hai bisogno e quando sei disponibile</div>
+    <div class="field-wrap">
+      <div class="field-label">Categoria</div>
+      <div class="cat-grid" style="grid-template-columns:repeat(3,1fr);">
+        <div class="cat-option" onclick="selectCat(this,'trasloco')"><span class="emoji">🚛</span><span class="cat-name">Trasloco</span></div>
+        <div class="cat-option" onclick="selectCat(this,'montaggio')"><span class="emoji">🪑</span><span class="cat-name">Montaggio</span></div>
+        <div class="cat-option" onclick="selectCat(this,'accompagnamento')"><span class="emoji">🚗</span><span class="cat-name">Accompag.</span></div>
+        <div class="cat-option" onclick="selectCat(this,'informatica')"><span class="emoji">💻</span><span class="cat-name">Informatica</span></div>
+        <div class="cat-option" onclick="selectCat(this,'casa')"><span class="emoji">🏠</span><span class="cat-name">Casa & Giardino</span></div>
+        <div class="cat-option" onclick="selectCat(this,'pulizie')"><span class="emoji">🧹</span><span class="cat-name">Pulizie & Cura</span></div>
+        <div class="cat-option selected" onclick="selectCat(this,'altro')" style="grid-column:span 3;"><span class="emoji">✨</span><span class="cat-name">Altro aiuto</span></div>
+      </div>
+      <div id="cat-note" style="display:none;margin-top:8px;border-radius:10px;padding:9px 11px;font-size:11px;line-height:1.6;"></div>
+    </div>
+    <div class="field-wrap" id="tags-wrap">
+      <div class="field-label">Dettagli</div>
+      <div id="tags-container"></div>
+    </div>
+
+    <div class="field-wrap">
+      <div class="field-label">Note aggiuntive <span style="color:var(--muted);font-weight:400;">(opzionale)</span></div>
+      <textarea class="field-input" id="req-notes" maxlength="120"
+        placeholder="Es. Porta stretta, serve pazienza con il cane…"
+        oninput="filterNotes(this)"
+        style="min-height:55px;resize:none;"></textarea>
+      <div style="display:flex;justify-content:space-between;margin-top:4px;">
+        <div id="notes-warning" style="font-size:11px;color:#f87171;display:none;">⚠️ Non inserire numeri, indirizzi o contatti personali</div>
+        <div style="font-size:10px;color:var(--muted);margin-left:auto;" id="notes-count">0/120</div>
+      </div>
+    </div>
+
+    <div style="background:rgba(96,165,250,0.07);border:1px solid rgba(96,165,250,0.18);border-radius:11px;padding:12px;margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:600;color:var(--blue);margin-bottom:10px;">📅 FINESTRA DI DISPONIBILITÀ</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Indica tra quali date sei disponibile. L'aiutante sceglierà 3 slot tra questi giorni.</div>
+      <div class="row-2">
+        <div class="field-wrap" style="margin-bottom:0;"><div class="field-label">Dal</div><input class="field-input" type="date" id="req-date-from"/></div>
+        <div class="field-wrap" style="margin-bottom:0;"><div class="field-label">Al</div><input class="field-input" type="date" id="req-date-to"/></div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="field-label">Orari preferiti</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;" id="time-prefs">
+          <div class="time-chip active" onclick="toggleTimeChip(this,'mattina')">🌅 Mattina<br><span style="font-size:10px;opacity:0.7;">8–12</span></div>
+          <div class="time-chip" onclick="toggleTimeChip(this,'pomeriggio')">☀️ Pomeriggio<br><span style="font-size:10px;opacity:0.7;">12–17</span></div>
+          <div class="time-chip" onclick="toggleTimeChip(this,'sera')">🌆 Sera<br><span style="font-size:10px;opacity:0.7;">17–21</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.18);border-radius:11px;padding:12px;margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:600;color:var(--green);margin-bottom:10px;">📍 LUOGO E CONTATTO</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Queste info verranno rivelate all'aiutante <strong style="color:var(--text)">solo dopo</strong> che avrai accettato uno slot.</div>
+      <div class="field-wrap" style="margin-bottom:10px;">
+        <div class="field-label">Indirizzo esatto</div>
+        <input class="field-input" placeholder="Es. Via Roma 14, Milano" id="req-address"/>
+      </div>
+      <div class="field-wrap" style="margin-bottom:10px;">
+        <div class="field-label">Interno / Piano</div>
+        <input class="field-input" placeholder="Es. Interno 3, Terzo piano" id="req-interno"/>
+      </div>
+      <div class="field-label" style="margin-bottom:6px;">Metodo contatto all'arrivo</div>
+      <div style="display:flex;flex-direction:column;gap:8px;" id="contact-methods">
+        <label class="contact-opt active" id="copt-citofono" onclick="selectContact('citofono')">
+          <span style="font-size:16px;">🔔</span>
+          <div style="flex:1"><div style="font-size:13px;font-weight:500;">Citofono / Campanello</div><input class="field-input" placeholder="Es. Rossi, oppure int. 3" id="req-citofono" style="margin-top:6px;" onclick="event.stopPropagation()"/></div>
+          <div class="contact-check" id="check-citofono">✓</div>
+        </label>
+        <label class="contact-opt" id="copt-telefono" onclick="selectContact('telefono')">
+          <span style="font-size:16px;">📞</span>
+          <div style="flex:1"><div style="font-size:13px;font-weight:500;">Telefono</div>
+          <div style="font-size:11px;color:var(--muted);">Visibile solo il giorno dell'appuntamento</div></div>
+          <div class="contact-check" id="check-telefono" style="display:none;">✓</div>
+        </label>
+        <label class="contact-opt" id="copt-whatsapp" onclick="selectContact('whatsapp')">
+          <span style="font-size:16px;">💬</span>
+          <div style="flex:1"><div style="font-size:13px;font-weight:500;">Messaggio in-app</div>
+          <div style="font-size:11px;color:var(--muted);">AiutiAmoci invia notifica automatica</div></div>
+          <div class="contact-check" id="check-whatsapp" style="display:none;">✓</div>
+        </label>
+      </div>
+    </div>
+    <div class="field-wrap">
+      <div class="field-label">Compenso (€)</div>
+      <div class="price-wrap"><span class="price-symbol">€</span><input class="field-input" type="number" placeholder="50" id="req-price"/></div>
+    </div>
+    <div style="background:rgba(245,200,66,0.07);border:1px solid rgba(245,200,66,0.18);border-radius:11px;padding:11px;margin-bottom:4px;font-size:12px;color:var(--muted);line-height:1.5;">
+      🔒 Il compenso sarà <strong style="color:var(--accent)">congelato</strong> alla pubblicazione e rilasciato solo a lavoro completato. AiutiAmoci trattiene il 10%.
+    </div>
+    <button class="btn-primary" onclick="submitRequest()">Pubblica e congela fondi →</button>
+    <button class="btn-ghost" onclick="closeNewModal()">Annulla</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="detailModal" onclick="closeDetailModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<!-- AVAILABILITY PROPOSAL MODAL -->
+<div class="avail-modal" id="availModal" onclick="closeAvailModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-height:93dvh;">
+    <div class="modal-handle"></div>
+    <div id="avail-body"></div>
+  </div>
+</div>
+
+<!-- APPOINTMENT MODAL -->
+<div class="modal-overlay" id="apptModal" onclick="closeApptModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div id="appt-modal-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authModal" onclick="closeAuthModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+
+    <!-- GATE VIEW (shown when user tries to do something) -->
+    <div id="auth-gate" style="display:none;">
+      <div style="text-align:center;padding:8px 0 20px;">
+        <div style="font-size:36px;margin-bottom:12px;">🔐</div>
+        <div class="modal-title" id="gate-title">Accedi per continuare</div>
+        <div class="modal-sub" id="gate-sub">Registrati o accedi per operare sulla piattaforma</div>
+      </div>
+    </div>
+
+    <!-- LOGIN / REGISTER TABS -->
+    <div id="auth-tabs">
+      <div style="display:flex;gap:0;background:var(--surface2);border-radius:12px;padding:3px;margin-bottom:22px;">
+        <button id="tab-login" onclick="switchTab('login')" style="flex:1;padding:9px;border-radius:10px;border:none;font-family:'Syne',sans-serif;font-weight:600;font-size:13px;cursor:pointer;background:var(--accent);color:var(--bg);transition:all 0.2s;">Accedi</button>
+        <button id="tab-register" onclick="switchTab('register')" style="flex:1;padding:9px;border-radius:10px;border:none;font-family:'Syne',sans-serif;font-weight:600;font-size:13px;cursor:pointer;background:transparent;color:var(--muted);transition:all 0.2s;">Registrati</button>
+      </div>
+
+      <!-- SOCIAL LOGIN -->
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;">
+        <button onclick="socialLogin('Google')" style="width:100%;padding:13px;background:var(--surface2);border:1px solid var(--border);border-radius:13px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#4285f4'" onmouseout="this.style.borderColor='var(--border)'">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          Continua con Google
+        </button>
+        <button onclick="socialLogin('Apple')" style="width:100%;padding:13px;background:var(--surface2);border:1px solid var(--border);border-radius:13px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#aaa'" onmouseout="this.style.borderColor='var(--border)'">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          Continua con Apple
+        </button>
+        <button onclick="socialLogin('Facebook')" style="width:100%;padding:13px;background:var(--surface2);border:1px solid var(--border);border-radius:13px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#1877f2'" onmouseout="this.style.borderColor='var(--border)'">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          Continua con Facebook
+        </button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+        <span style="font-size:12px;color:var(--muted);">oppure</span>
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+      </div>
+
+      <!-- LOGIN FORM -->
+      <div id="form-login">
+        <div class="field-wrap"><div class="field-label">Email</div><input class="field-input" type="email" placeholder="la.tua@email.com" id="login-email"/></div>
+        <div class="field-wrap"><div class="field-label">Password</div>
+          <div style="position:relative;">
+            <input class="field-input" type="password" placeholder="••••••••" id="login-pw" style="padding-right:44px;"/>
+            <button onclick="togglePw('login-pw')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;">👁</button>
+          </div>
+        </div>
+        <div style="text-align:right;margin-bottom:16px;"><span style="font-size:12px;color:var(--accent);cursor:pointer;">Password dimenticata?</span></div>
+        <button class="btn-primary" onclick="doLogin()">Accedi →</button>
+        <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--muted);">Non hai un account? <span style="color:var(--accent);cursor:pointer;" onclick="switchTab('register')">Registrati</span></div>
+      </div>
+
+      <!-- REGISTER FORM -->
+      <div id="form-register" style="display:none;">
+        <div class="row-2">
+          <div class="field-wrap"><div class="field-label">Nome</div><input class="field-input" placeholder="Marco" id="reg-name"/></div>
+          <div class="field-wrap"><div class="field-label">Cognome</div><input class="field-input" placeholder="Rossi" id="reg-surname"/></div>
+        </div>
+        <div class="field-wrap"><div class="field-label">Email</div><input class="field-input" type="email" placeholder="la.tua@email.com" id="reg-email"/></div>
+        <div class="field-wrap"><div class="field-label">Password</div>
+          <div style="position:relative;">
+            <input class="field-input" type="password" placeholder="Min. 8 caratteri" id="reg-pw" style="padding-right:44px;" oninput="checkPwStrength(this.value)"/>
+            <button onclick="togglePw('reg-pw')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;">👁</button>
+          </div>
+          <div id="pw-strength" style="margin-top:6px;display:flex;gap:4px;">
+            <div id="ps1" style="flex:1;height:3px;border-radius:2px;background:var(--border);transition:background 0.3s;"></div>
+            <div id="ps2" style="flex:1;height:3px;border-radius:2px;background:var(--border);transition:background 0.3s;"></div>
+            <div id="ps3" style="flex:1;height:3px;border-radius:2px;background:var(--border);transition:background 0.3s;"></div>
+            <div id="ps4" style="flex:1;height:3px;border-radius:2px;background:var(--border);transition:background 0.3s;"></div>
+          </div>
+          <div id="pw-strength-label" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
+        </div>
+        <div style="background:rgba(245,200,66,0.07);border:1px solid rgba(245,200,66,0.15);border-radius:10px;padding:10px;font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:16px;">
+          Registrandoti accetti i <span style="color:var(--accent);cursor:pointer;">Termini di Servizio</span> e la <span style="color:var(--accent);cursor:pointer;">Privacy Policy</span> di AiutiAmoci.
+        </div>
+        <button class="btn-primary" onclick="doRegister()">Crea account →</button>
+        <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--muted);">Hai già un account? <span style="color:var(--accent);cursor:pointer;" onclick="switchTab('login')">Accedi</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WALLET MODAL -->
+<div class="modal-overlay" id="walletModal" onclick="closeWalletModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-height:93dvh;">
+    <div class="modal-handle"></div>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:21px;margin-bottom:2px;">Wallet</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:20px;">I tuoi fondi su AiutiAmoci</div>
+    <div id="wallet-body" style="overflow-y:auto;max-height:75dvh;"></div>
+  </div>
+</div>
+
+<!-- WALLET PRELEVA MODAL -->
+<div class="modal-overlay" id="prelievoModal" onclick="closePrelievoModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div id="prelievo-body"></div>
+  </div>
+</div>
+
+<!-- WALLET RICARICA MODAL -->
+<div class="modal-overlay" id="ricaricaModal" onclick="closeRicaricaModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div id="ricarica-body"></div>
+  </div>
+</div>
+
+<!-- INCARICHI CONCLUDI MODAL -->
+<div class="modal-overlay" id="inc-concludi-modal" onclick="this.classList.remove('open')">
+  <div class="modal" onclick="event.stopPropagation()" style="max-height:90dvh;">
+    <div class="modal-handle"></div>
+    <div id="inc-concludi-body"></div>
+  </div>
+</div>
+
+<!-- INCARICHI ANNULLA MODAL -->
+<div class="modal-overlay" id="inc-annulla-modal" onclick="this.classList.remove('open')">
+  <div class="modal" onclick="event.stopPropagation()" style="max-height:90dvh;">
+    <div class="modal-handle"></div>
+    <div id="inc-annulla-body"></div>
+  </div>
+</div>
+
+<!-- INCARICHI MODAL -->
+<div class="modal-overlay" id="incarichiModal" onclick="closeIncarichiModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-height:93dvh;">
+    <div class="modal-handle"></div>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:21px;margin-bottom:4px;">Incarichi</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:18px;">Le tue attività come inserzionista e come aiutante</div>
+    <!-- TAB BAR -->
+    <div style="display:flex;gap:6px;margin-bottom:18px;background:var(--surface2);border-radius:12px;padding:4px;" id="inc-tabs">
+      <div onclick="switchIncTab('richieste')" id="inc-tab-richieste"
+        style="flex:1;text-align:center;padding:8px 4px;border-radius:9px;font-family:'Syne',sans-serif;font-weight:600;font-size:12px;cursor:pointer;background:var(--accent);color:var(--bg);transition:all 0.2s;">
+        📋 Richieste
+      </div>
+      <div onclick="switchIncTab('aiutante')" id="inc-tab-aiutante"
+        style="flex:1;text-align:center;padding:8px 4px;border-radius:9px;font-family:'Syne',sans-serif;font-weight:600;font-size:12px;cursor:pointer;color:var(--muted);transition:all 0.2s;">
+        🔧 Aiutante
+      </div>
+      <div onclick="switchIncTab('conclusi')" id="inc-tab-conclusi"
+        style="flex:1;text-align:center;padding:8px 4px;border-radius:9px;font-family:'Syne',sans-serif;font-weight:600;font-size:12px;cursor:pointer;color:var(--muted);transition:all 0.2s;">
+        ✅ Riepilogo
+      </div>
+    </div>
+    <div id="inc-body" style="overflow-y:auto;max-height:62dvh;"></div>
+    <button class="btn-ghost" onclick="closeIncarichiModal()" style="margin-top:12px;">Chiudi</button>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div class="modal-overlay" id="profileModal" onclick="closeProfileModal()">
+  <div class="modal" onclick="event.stopPropagation()" style="max-height:93dvh;">
+    <div class="modal-handle"></div>
+    <div id="profile-body"></div>
+  </div>
+</div>
+
+<!-- FEEDBACK MODAL -->
+<div class="modal-overlay" id="feedbackModal" onclick="closeFeedbackModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div id="feedback-body"></div>
+  </div>
+</div>
+
+<!-- CANCEL MODAL -->
+<div class="modal-overlay" id="cancelModal" onclick="closeCancelModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div id="cancel-body"></div>
+  </div>
+</div>
+
+
+
+<script>
+// ── DATA ──
+const requests = [
+  {id:1,title:"Trasloco appartamento 3 locali",desc:"Devo traslocare da un appartamento al 3° piano senza ascensore. Mobili smontati, scatoloni pronti. Serve furgone e 2 persone.",price:180,date:"2026-03-14",availFrom:"2026-03-14",availTo:"2026-03-18",timePrefs:['mattina'],cat:"trasloco",mx:0.55,my:0.42,user:"Luca R.",address:"Via Torino 22, Milano",interno:"Quarto piano, int. 8",contactMethod:"citofono",contactValue:"Russo"},
+  {id:2,title:"Montaggio cucina IKEA",desc:"Cucina IKEA acquistata nuova, circa 12 elementi. Ho tutti gli attrezzi disponibili.",price:90,date:"2026-03-15",availFrom:"2026-03-15",availTo:"2026-03-22",timePrefs:['mattina','pomeriggio'],cat:"montaggio",mx:0.35,my:0.58,user:"Sofia M.",address:"Corso Buenos Aires 14, Milano",interno:"Secondo piano, int. 4 — campanello a sinistra",contactMethod:"citofono",contactValue:"Marchetti"},
+  {id:3,title:"Accompagnamento visita medica",desc:"Ho bisogno di un passaggio per una visita medica e rientro a casa. Durata circa 2 ore totali.",price:35,date:"2026-03-13",availFrom:"2026-03-13",availTo:"2026-03-16",timePrefs:['mattina'],cat:"accompagnamento",mx:0.62,my:0.33,user:"Marco T.",address:"Via Nomentana 88, Roma",interno:"Piano terra, interno unico",contactMethod:"telefono",contactValue:""},
+  {id:4,title:"Aiuto configurazione PC e stampante",desc:"Ho acquistato un PC nuovo e non riesco a configurarlo. Serve anche collegare la stampante di rete.",price:45,date:"2026-03-16",availFrom:"2026-03-16",availTo:"2026-03-20",timePrefs:['pomeriggio'],cat:"informatica",mx:0.28,my:0.38,user:"Anna P.",address:"Via Dante 5, Torino",interno:"Terzo piano, int. 12",contactMethod:"whatsapp",contactValue:""},
+  {id:5,title:"Potatura siepe e pulizia giardino",desc:"Piccolo giardino da sistemare: potatura siepe, raccolta foglie, spostamento vasi pesanti.",price:55,date:"2026-03-15",availFrom:"2026-03-15",availTo:"2026-03-21",timePrefs:['mattina'],cat:"casa",mx:0.72,my:0.62,user:"Roberto V.",address:"Via dei Colli 3, Bologna",interno:"Villa — cancello automatico",contactMethod:"whatsapp",contactValue:""},
+  {id:6,title:"Facchinaggio e montaggio scaffali",desc:"Sistemazione magazzino: scaffali da montare e scatoloni da riorganizzare. Circa 4 ore.",price:120,date:"2026-03-17",availFrom:"2026-03-17",availTo:"2026-03-19",timePrefs:['mattina','pomeriggio'],cat:"montaggio",mx:0.44,my:0.70,user:"Giulia F.",address:"Via Mecenate 76, Milano",interno:"Capannone B2",contactMethod:"citofono",contactValue:"Ferrara"},
+];
+const catColors={
+  trasloco:'#ff6b35',
+  montaggio:'#60a5fa',
+  accompagnamento:'#a78bfa',
+  informatica:'#34d399',
+  casa:'#fb923c',
+  pulizie:'#fbbf24',
+  altro:'#f5c842'
+};
+const catEmoji={
+  trasloco:'🚛',
+  montaggio:'🪑',
+  accompagnamento:'🚗',
+  informatica:'💻',
+  casa:'🏠',
+  pulizie:'🧹',
+  altro:'✨'
+};
+let selectedCat='altro', selectedContact='citofono', sheetOpen=false, currentFilter='tutti';
+
+// ── MAP STATE ──
+// The map world is MAP_W × MAP_H pixels at zoom=1
+// panX, panY = top-left of viewport in world coords
+const MAP_W = 2000, MAP_H = 2000;
+let zoom = 1.0, panX = 0, panY = 0;
+let isDragging = false, dragStartX, dragStartY, panStartX, panStartY;
+let lastTouchDist = null;
+
+function getVW(){ return (mc||document.getElementById('map-container')).offsetWidth; }
+function getVH(){ return (mc||document.getElementById('map-container')).offsetHeight; }
+
+// ── DRAW MAP ──
+function drawMap() {
+  const canvas = document.getElementById('map-canvas');
+  const VW = getVW(), VH = getVH();
+  const CW = MAP_W * zoom, CH = MAP_H * zoom;
+  canvas.width = CW; canvas.height = CH;
+  canvas.style.left = (-panX) + 'px';
+  canvas.style.top  = (-panY) + 'px';
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle='#0d1520'; ctx.fillRect(0,0,CW,CH);
+
+  // Parks
+  [[0.6,0.2,0.12,0.1],[0.2,0.5,0.09,0.08],[0.75,0.7,0.11,0.09]].forEach(([px,py,rw,rh])=>{
+    ctx.fillStyle='#0e2015'; ctx.beginPath();
+    ctx.ellipse(CW*px,CH*py,CW*rw,CH*rh,0,0,Math.PI*2); ctx.fill();
+  });
+  // Water
+  ctx.fillStyle='#0a1a2e'; ctx.beginPath();
+  ctx.ellipse(CW*0.12,CH*0.88,CW*0.18,CH*0.12,-0.3,0,Math.PI*2); ctx.fill();
+
+  // City blocks
+  [[0.05,0.05,0.12,0.08],[0.22,0.04,0.1,0.09],[0.38,0.06,0.09,0.07],[0.54,0.04,0.11,0.08],[0.70,0.05,0.1,0.07],[0.84,0.04,0.1,0.08],
+   [0.05,0.20,0.1,0.08],[0.20,0.21,0.08,0.09],[0.50,0.22,0.09,0.08],[0.66,0.20,0.08,0.09],[0.80,0.20,0.09,0.08],
+   [0.05,0.36,0.1,0.08],[0.21,0.37,0.08,0.07],[0.48,0.35,0.09,0.09],[0.65,0.37,0.08,0.07],[0.82,0.36,0.07,0.08],
+   [0.05,0.52,0.1,0.08],[0.22,0.53,0.08,0.07],[0.50,0.51,0.09,0.08],[0.67,0.52,0.08,0.07],[0.82,0.52,0.08,0.08],
+   [0.05,0.67,0.1,0.07],[0.24,0.68,0.09,0.07],[0.52,0.66,0.09,0.08],[0.68,0.67,0.08,0.07],[0.84,0.66,0.08,0.08],
+   [0.20,0.80,0.09,0.07],[0.38,0.81,0.1,0.07],[0.58,0.80,0.09,0.08],[0.75,0.80,0.09,0.07],[0.88,0.80,0.07,0.07],
+  ].forEach(([bx,by,bw,bh])=>{
+    ctx.fillStyle='#111c2a'; ctx.strokeStyle='#1a2a3a'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.roundRect(CW*bx,CH*by,CW*bw,CH*bh,5); ctx.fill(); ctx.stroke();
+  });
+
+  // Horizontal roads
+  [0.15,0.30,0.45,0.60,0.75,0.88].forEach(ry=>{
+    ctx.strokeStyle='#1e3048'; ctx.lineWidth=6*zoom; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(0,CH*ry); ctx.lineTo(CW,CH*ry); ctx.stroke();
+  });
+  // Vertical roads
+  [0.18,0.36,0.55,0.72,0.88].forEach(rx=>{
+    ctx.strokeStyle='#1e3048'; ctx.lineWidth=6*zoom; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(CW*rx,0); ctx.lineTo(CW*rx,CH); ctx.stroke();
+  });
+  // Main arteries
+  ctx.strokeStyle='#24405a'; ctx.lineWidth=11*zoom; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(0,CH*0.45); ctx.lineTo(CW,CH*0.45); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(CW*0.36,0); ctx.lineTo(CW*0.36,CH); ctx.stroke();
+
+  // Road labels at zoom > 1.5
+  if (zoom >= 1.4) {
+    ctx.fillStyle='rgba(96,165,250,0.35)'; ctx.font=`${12*zoom}px DM Sans,sans-serif`;
+    ctx.fillText('Via Roma', CW*0.37+4, CH*0.44-6);
+    ctx.fillText('Corso Italia', CW*0.1, CH*0.455);
+  }
+}
+
+// ── UPDATE MARKERS & USER DOT ──
+// Set of confirmed job IDs (slot accepted by inserzionista)
+const confirmedJobIds = new Set();
+
+// Deterministico: offset fisso per ogni richiesta basato sull'id
+// così il cerchio non cambia posizione ad ogni render ma è sempre spostato dalla reale
+function fuzzOffset(id, seed) {
+  // pseudo-random stabile basato su id+seed
+  const s = Math.sin(id * 9301 + seed * 49297) * 0.5 + 0.5;
+  return (s - 0.5) * 2; // da -1 a 1
+}
+
+function updateOverlay(filter) {
+  const layer = document.getElementById('markers-layer');
+  const CW = MAP_W*zoom, CH = MAP_H*zoom;
+  layer.style.left = (-panX)+'px';
+  layer.style.top  = (-panY)+'px';
+  layer.style.width  = CW+'px';
+  layer.style.height = CH+'px';
+
+  const filtered = filter==='tutti' ? requests : requests.filter(r=>r.cat===filter);
+
+  layer.innerHTML = filtered.map(r=>{
+    const col         = catColors[r.cat];
+    const isConfirmed = confirmedJobIds.has(r.id);
+
+    // Raggio cerchio: ~100px a zoom1 = ~1km visivo
+    const radius   = 100 * zoom;
+    const diameter = radius * 2;
+
+    if(isConfirmed) {
+      // Slot accettato: cerchio più solido + badge "in svolgimento"
+      // Offset ridotto (cerchio rimane ma posizione resta approssimata)
+      const ox = fuzzOffset(r.id, 1) * 40 * zoom;
+      const oy = fuzzOffset(r.id, 2) * 40 * zoom;
+      const cx = r.mx*CW + ox, cy = r.my*CH + oy;
+      return `
+        <div style="position:absolute;left:${cx}px;top:${cy}px;transform:translate(-50%,-50%);cursor:pointer;pointer-events:all;" onclick="openDetail(${r.id})">
+          <!-- Outer pulse ring -->
+          <div style="position:absolute;inset:0;border-radius:50%;border:2px solid ${col}60;animation:upulse 2.2s infinite;pointer-events:none;"></div>
+          <!-- Cerchio pieno semitrasparente -->
+          <div style="width:${diameter}px;height:${diameter}px;border-radius:50%;
+            background:radial-gradient(circle, ${col}28 0%, ${col}10 55%, transparent 100%);
+            border:2px solid ${col}90;
+            display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">
+            <!-- Badge prezzo -->
+            <div style="background:${col}; color:#0a0f18; padding:3px 10px; border-radius:20px;
+              font-family:'Syne',sans-serif; font-weight:800; font-size:${Math.max(9,11*zoom)}px;
+              white-space:nowrap; box-shadow:0 2px 10px ${col}55;">
+              ${catEmoji[r.cat]} €${r.price}
+            </div>
+            <!-- In svolgimento badge -->
+            <div style="background:rgba(10,15,24,0.82); color:${col}; padding:2px 8px; border-radius:20px;
+              font-family:'DM Sans',sans-serif; font-weight:600; font-size:${Math.max(8,9*zoom)}px;
+              white-space:nowrap; border:1px solid ${col}50;">
+              ● in svolgimento
+            </div>
+          </div>
+        </div>`;
+    } else {
+      // Non ancora confermato: cerchio sfumato tratteggiato con offset maggiore
+      const ox = fuzzOffset(r.id, 1) * 65 * zoom;
+      const oy = fuzzOffset(r.id, 2) * 65 * zoom;
+      const cx = r.mx*CW + ox, cy = r.my*CH + oy;
+      return `
+        <div style="position:absolute;left:${cx}px;top:${cy}px;transform:translate(-50%,-50%);cursor:pointer;pointer-events:all;" onclick="openDetail(${r.id})">
+          <!-- Cerchio sfumato tratteggiato -->
+          <div style="width:${diameter}px;height:${diameter}px;border-radius:50%;
+            background:radial-gradient(circle, ${col}18 0%, ${col}08 60%, transparent 100%);
+            border:1.5px dashed ${col}45;
+            display:flex;align-items:center;justify-content:center;">
+            <!-- Badge prezzo dentro il cerchio -->
+            <div style="background:rgba(10,15,24,0.88); color:${col}; padding:4px 11px; border-radius:20px;
+              font-family:'Syne',sans-serif; font-weight:700; font-size:${Math.max(9,11*zoom)}px;
+              white-space:nowrap; border:1.5px dashed ${col}60;
+              box-shadow:0 2px 12px rgba(0,0,0,0.5);">
+              ${catEmoji[r.cat]} €${r.price}
+            </div>
+          </div>
+        </div>`;
+    }
+  }).join('');
+
+  // User dot at map center
+  // User dot is fixed at screen center via CSS
+}
+
+function clampPan() {
+  const VW=getVW(), VH=getVH();
+  const CW=MAP_W*zoom, CH=MAP_H*zoom;
+  panX = Math.max(0, Math.min(panX, CW-VW));
+  panY = Math.max(0, Math.min(panY, CH-VH));
+}
+
+function updateMapBadge(){} // no-op, badge removed
+
+function render() {
+  clampPan();
+  drawMap();
+  updateOverlay(currentFilter);
+  updateMapBadge();
+  document.getElementById('zoom-indicator').textContent = 'z '+zoom.toFixed(1)+'×';
+}
+
+// ── ZOOM ──
+const MIN_ZOOM=0.5, MAX_ZOOM=4;
+function zoomIn()  { applyZoom(zoom*1.3); }
+function zoomOut() { applyZoom(zoom/1.3); }
+
+function applyZoom(newZoom, cx, cy) {
+  const VW=getVW(), VH=getVH();
+  cx = cx ?? VW/2; cy = cy ?? VH/2;
+  // world point under cursor before zoom
+  const wx = (panX + cx) / zoom;
+  const wy = (panY + cy) / zoom;
+  zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
+  // keep same world point under cursor after zoom
+  panX = wx*zoom - cx;
+  panY = wy*zoom - cy;
+  render();
+}
+
+function centerMap() {
+  const VW=getVW(), VH=getVH();
+  panX = MAP_W*zoom*0.5 - VW/2;
+  panY = MAP_H*zoom*0.5 - VH/2;
+  render();
+  showToast('📍 Posizione aggiornata');
+}
+
+// mc listeners attached in init() after DOM is ready
+let mc = null;
+
+function getTouchDist(e){
+  const dx=e.touches[0].clientX-e.touches[1].clientX;
+  const dy=e.touches[0].clientY-e.touches[1].clientY;
+  return Math.sqrt(dx*dx+dy*dy);
+}
+
+// ── SHEET ──
+function toggleSheet(){
+  sheetOpen = !sheetOpen;
+  document.getElementById('sheet').className = 'sheet '+(sheetOpen?'expanded':'collapsed');
+  const chevron = document.getElementById('sheet-chevron');
+  if(chevron) chevron.style.transform = sheetOpen ? 'rotate(90deg)' : 'rotate(0deg)';
+}
+
+function renderSheet(filter){
+  currentFilter = filter;
+  const filtered = filter==='tutti' ? requests : requests.filter(r=>r.cat===filter);
+  updateMapBadge();
+
+  // Aggiorna titolo contatore
+  const title = document.getElementById('sheet-title');
+  if(title) {
+    const n = filtered.length;
+    title.textContent = n === 0 ? 'Nessuna richiesta nella zona'
+      : n === 1 ? '1 richiesta nella zona'
+      : `${n} richieste nella zona`;
+  }
+
+  document.getElementById('sheet-content').innerHTML = filtered.map(r=>`
+    <div class="req-card cat-${r.cat}" onclick="openDetail(${r.id})">
+      <div class="req-top"><div class="req-title">${r.title}</div><div class="req-price">€${r.price}</div></div>
+      <div class="req-desc">${r.desc}</div>
+      <div class="req-meta">
+        <span class="cat-badge">${catEmoji[r.cat]} ${r.cat}</span>
+        <span class="meta-chip">📅 ${fmtDate(r.date)}</span>
+      </div>
+    </div>`).join('');
+}
+function fmtDate(d){
+  const[,m,day]=d.split('-');
+  return `${parseInt(day)} ${['','Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][parseInt(m)]}`;
+}
+
+
+function closeDetailModal(){
+  const el = document.getElementById('detailModal');
+  if(el) el.classList.remove('open');
+}
+
+// ── DETAIL ──
+let _detailRequestId = null;
+function openDetail(id){
+  const r=requests.find(x=>x.id===id); if(!r) return;
+  _detailRequestId = id;
+  const net=Math.round(r.price*0.9);
+  const dc = document.getElementById('detail-content');
+  const dm = document.getElementById('detailModal');
+  if(!dc || !dm){ console.warn('detail elements missing'); return; }
+
+  // Format availability window
+  const availFrom = r.availFrom ? fmtDate(r.availFrom) : fmtDate(r.date);
+  const availTo   = r.availTo   ? fmtDate(r.availTo)   : fmtDate(r.date);
+  const timeLabels = { mattina:'🌅 Mattina (8–12)', pomeriggio:'☀️ Pomeriggio (12–17)', sera:'🌆 Sera (17–21)' };
+  const timePrefs  = (r.timePrefs||['mattina']).map(t=>timeLabels[t]||t).join(', ');
+
+  dc.innerHTML=`
+    <div class="detail-header">
+      <div>
+        <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px;">${catEmoji[r.cat]} ${r.cat}</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px;line-height:1.2;max-width:200px;">${r.title}</div>
+      </div>
+      <div><div class="detail-price-big">€${r.price}</div>
+      <div class="detail-price-sub">Guadagni €${net}<br><span style="color:rgba(255,107,53,0.8);">−10% AiutiAmoci</span></div></div>
+    </div>
+    <div class="escrow-badge">🔒 Fondi congelati in escrow</div>
+    <div class="detail-section"><div class="detail-section-title">Descrizione</div><div class="detail-section-text">${r.desc}</div></div>
+
+    <div class="detail-section" style="border:1px solid rgba(96,165,250,0.2);background:rgba(96,165,250,0.05);">
+      <div class="detail-section-title" style="color:var(--blue);">📅 Disponibilità dell'inserzionista</div>
+      <div class="detail-row" style="margin-top:6px;">
+        <div class="detail-icon">🗓</div>
+        <div><div style="font-size:10px;color:var(--muted);font-weight:600;">FINESTRA DATE</div>
+        <div style="font-size:13px;font-weight:500;">${availFrom} → ${availTo}</div></div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-icon">🕐</div>
+        <div><div style="font-size:10px;color:var(--muted);font-weight:600;">ORARI PREFERITI</div>
+        <div style="font-size:13px;font-weight:500;">${timePrefs}</div></div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-icon">👤</div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);font-weight:600;">INSERZIONISTA</div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:5px;">${r.user}</div>
+          ${reputationBadge(r.user, true)}
+        </div>
+      </div>
+    </div>
+
+    <div style="background:rgba(245,200,66,0.07);border:1px solid rgba(245,200,66,0.15);border-radius:10px;padding:10px;font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:4px;">
+      💡 Per accettare devi proporre <strong style="color:var(--accent)">3 slot disponibili</strong> tra le date indicate. L'inserzionista sceglierà quello più adatto. Nessun contatto diretto.
+    </div>
+    <button class="btn-accept" onclick="onAcceptBtnClick()">📅 Proponi la tua disponibilità →</button>
+    <button class="btn-ghost" onclick="closeDetailModal()">Chiudi</button>`;
+  dm.classList.add('open');
+}
+
+function onAcceptBtnClick(){
+  const r=requests.find(x=>x.id===_detailRequestId); if(!r) return;
+  requireAuth('Proponi disponibilità', ()=>openAvailModal(r));
+}
+// ── AVAILABILITY PROPOSAL SYSTEM ──
+let _availRequest = null;
+
+function openAvailModal(r) {
+  _availRequest = r;
+  closeDetailModal();
+  buildAvailView('propose');
+  document.getElementById('availModal').classList.add('open');
+}
+function closeAvailModal() {
+  document.getElementById('availModal').classList.remove('open');
+}
+
+function buildAvailView(view) {
+  const body = document.getElementById('avail-body');
+  const r = _availRequest;
+  if (!r) return;
+  const net = Math.round(r.price * 0.9);
+
+  if (view === 'propose') {
+    // Generate selectable dates within availability window
+    const fromDate = r.availFrom || r.date;
+    const toDate   = r.availTo   || r.date;
+    const dates    = getDatesInRange(fromDate, toDate).slice(0, 14); // max 14 days
+    const timeOpts = buildTimeOptions(r.timePrefs || ['mattina','pomeriggio','sera']);
+
+    body.innerHTML = `
+      <div style="margin-bottom:18px;">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;">✋ Proponi disponibilità</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:4px;">${r.title}</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.5;">Scegli <strong style="color:var(--accent)">3 slot</strong> in cui sei disponibile. L'inserzionista sceglierà uno. Nessun contatto diretto tra voi.</div>
+      </div>
+
+      <div style="background:rgba(96,165,250,0.07);border:1px solid rgba(96,165,250,0.18);border-radius:11px;padding:11px;margin-bottom:16px;font-size:12px;color:var(--muted);line-height:1.5;">
+        🗓 Finestra disponibile: <strong style="color:var(--text);">${fmtDate(fromDate)} → ${fmtDate(toDate)}</strong>
+      </div>
+
+      ${[1,2,3].map(n => `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <div class="slot-num">${n}</div>
+          <div style="font-size:12px;font-weight:600;color:var(--text);">Slot ${n}</div>
+        </div>
+        <div class="row-2">
+          <div>
+            <div class="field-label">Data</div>
+            <select class="field-input" id="slot${n}-date" style="appearance:none;">
+              <option value="">Scegli data…</option>
+              ${dates.map(d=>`<option value="${d}">${fmtDate(d)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <div class="field-label">Orario</div>
+            <select class="field-input" id="slot${n}-time" style="appearance:none;">
+              <option value="">Scegli orario…</option>
+              ${timeOpts.map(t=>`<option value="${t.val}">${t.label}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+      </div>`).join('')}
+
+      <button onclick="submitAvailability()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg);border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;margin-top:4px;margin-bottom:8px;box-shadow:0 6px 20px rgba(245,200,66,0.22);">
+        Invia disponibilità →
+      </button>
+      <div style="font-size:11px;color:var(--muted);text-align:center;line-height:1.5;margin-bottom:8px;">Riceverai notifica quando l'inserzionista sceglie uno dei tuoi slot.</div>
+      <button class="btn-ghost" onclick="closeAvailModal()">Annulla</button>
+    `;
+  }
+
+  else if (view === 'sent') {
+    const slots = _availRequest._proposedSlots || [];
+    body.innerHTML = `
+      <div style="text-align:center;padding:10px 0 20px;">
+        <div style="font-size:44px;margin-bottom:14px;">📨</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:21px;margin-bottom:6px;">Disponibilità inviata!</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px;">L'inserzionista riceverà i tuoi 3 slot e sceglierà quello più adatto.<br>Ti notificheremo appena decide.</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:14px;padding:14px;margin-bottom:16px;">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:10px;">I TUOI 3 SLOT PROPOSTI</div>
+        ${slots.map((s,i)=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;${i<slots.length-1?'border-bottom:1px solid var(--border);':''}">
+            <div class="slot-num">${i+1}</div>
+            <div style="font-size:13px;font-weight:500;">${fmtDate(s.date)} · ${s.timeLabel}</div>
+          </div>`).join('')}
+      </div>
+
+      <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px;font-weight:600;">Simula risposta inserzionista:</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+        ${slots.map((s,i)=>`
+          <button onclick="inserzionistaScegli(${i})" style="width:100%;padding:11px;background:var(--surface2);border:1px solid rgba(245,200,66,0.2);border-radius:11px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;text-align:left;transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='rgba(245,200,66,0.2)'">
+            ✓ Accetta slot ${i+1}: <strong>${fmtDate(s.date)} · ${s.timeLabel}</strong>
+          </button>`).join('')}
+        <button onclick="inserzionaRifiuta()" style="width:100%;padding:11px;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);border-radius:11px;color:#f87171;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;">
+          ✗ Rifiuta tutti gli slot
+        </button>
+      </div>
+      <button class="btn-ghost" onclick="closeAvailModal()">Chiudi</button>
+    `;
+  }
+
+  else if (view === 'accepted') {
+    const slot = _availRequest._confirmedSlot;
+    // Pull contact info from request (demo values if not set)
+    const addr    = r.address  || 'Via Roma 14, Milano';
+    const interno = r.interno  || 'Terzo piano, int. 3';
+    const cMethod = r.contactMethod || 'citofono';
+    const cValue  = r.contactValue  || 'Rossi';
+    const contactIcons = { citofono:'🔔', telefono:'📞', whatsapp:'💬' };
+    const contactLabels = { citofono:'Citofono / Campanello', telefono:'Telefono', whatsapp:'Messaggio in-app' };
+    const contactHint = {
+      citofono: `Suona il campanello: <strong style="color:var(--text);">${cValue}</strong>`,
+      telefono: `Chiama il numero — visibile solo oggi: <strong style="color:var(--accent);">+39 348 *** ****</strong>`,
+      whatsapp: `AiutiAmoci ti invierà una notifica automatica all'arrivo`
+    };
+
+    body.innerHTML = `
+      <div style="text-align:center;padding:8px 0 18px;">
+        <div style="width:60px;height:60px;border-radius:20px;background:rgba(74,222,128,0.12);border:2px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 12px;animation:scaleIn 0.38s cubic-bezier(0.34,1.56,0.64,1);">✓</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:4px;color:var(--green);">Slot confermato!</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;">Ecco tutti i dettagli del tuo appuntamento.</div>
+      </div>
+
+      <!-- QUANDO -->
+      <div style="background:var(--surface2);border-radius:14px;padding:14px;margin-bottom:10px;">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:0.8px;margin-bottom:10px;">🗓 QUANDO</div>
+        <div style="font-size:16px;font-weight:700;color:var(--accent);">${fmtDate(slot.date)}</div>
+        <div style="font-size:14px;font-weight:500;color:var(--text);margin-top:2px;">${slot.timeLabel}</div>
+      </div>
+
+      <!-- DOVE -->
+      <div style="background:var(--surface2);border-radius:14px;padding:14px;margin-bottom:10px;">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:0.8px;margin-bottom:10px;">📍 DOVE</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text);">${addr}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:3px;">${interno}</div>
+      </div>
+
+      <!-- COME AVVISARE -->
+      <div style="background:var(--surface2);border-radius:14px;padding:14px;margin-bottom:10px;">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:0.8px;margin-bottom:10px;">${contactIcons[cMethod]} COME AVVISARE ALL'ARRIVO</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">${contactLabels[cMethod]}</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.5;">${contactHint[cMethod]}</div>
+      </div>
+
+      <!-- COMPENSO -->
+      <div style="background:rgba(245,200,66,0.07);border:1px solid rgba(245,200,66,0.18);border-radius:14px;padding:14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:2px;">💰 IL TUO GUADAGNO</div>
+          <div style="font-size:11px;color:var(--muted);">Bloccato in escrow · sbloccato a lavoro finito</div>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--accent);">€${net}</div>
+      </div>
+
+      <div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);border-radius:11px;padding:10px;font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:14px;">
+        ⚠️ <strong style="color:var(--text);">Importante:</strong> i fondi verranno sbloccati solo quando <strong>sia tu che l'inserzionista</strong> avrete confermato il completamento del lavoro.
+      </div>
+
+      <button onclick="goToApptFromAvail()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg);border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:8px;box-shadow:0 6px 20px rgba(245,200,66,0.2);">
+        Vai all'incarico →
+      </button>
+      <button class="btn-ghost" onclick="closeAvailModal()">Chiudi</button>
+    `;
+  }
+
+  else if (view === 'rejected') {
+    body.innerHTML = `
+      <div style="text-align:center;padding:20px 0;">
+        <div style="font-size:44px;margin-bottom:14px;">😔</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:8px;">Slot non accettati</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:22px;">L'inserzionista non ha trovato compatibilità con i tuoi slot.<br>Puoi riprovare con date diverse.</div>
+        <button onclick="buildAvailView('propose')" style="width:100%;padding:14px;background:var(--accent);color:var(--bg);border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:8px;">
+          Riprova con altri slot →
+        </button>
+        <button class="btn-ghost" onclick="closeAvailModal()">Chiudi</button>
+      </div>
+    `;
+  }
+}
+
+function submitAvailability() {
+  const slots = [];
+  for (let n=1; n<=3; n++) {
+    const d = document.getElementById(`slot${n}-date`)?.value;
+    const t = document.getElementById(`slot${n}-time`)?.value;
+    if (!d || !t) { showToast(`⚠️ Compila tutti e 3 gli slot`); return; }
+    const tLabel = document.getElementById(`slot${n}-time`)?.selectedOptions[0]?.text || t;
+    slots.push({ date:d, time:t, timeLabel:tLabel });
+  }
+  // Check no duplicates
+  const uniq = new Set(slots.map(s=>s.date+'_'+s.time));
+  if (uniq.size < 3) { showToast('⚠️ I 3 slot devono essere diversi'); return; }
+  _availRequest._proposedSlots = slots;
+  buildAvailView('sent');
+}
+
+function inserzionistaScegli(idx) {
+  const slot = _availRequest._proposedSlots[idx];
+  _availRequest._confirmedSlot = slot;
+  confirmedJobIds.add(_availRequest.id); // ora il punto diventa preciso
+  render(); // aggiorna mappa
+  buildAvailView('accepted');
+  showToast('✅ Slot accettato dall\'inserzionista!');
+}
+function inserzionaRifiuta() {
+  buildAvailView('rejected');
+  showToast('❌ Inserzionista ha rifiutato tutti gli slot');
+}
+
+function goToApptFromAvail() {
+  const r = _availRequest;
+  const slot = r._confirmedSlot;
+  activeAppt = { id:r.id, date:slot.date, time:slot.timeLabel, title:r.title, price:r.price, status:'confirmed' };
+  closeAvailModal();
+  openAppointmentModal();
+}
+
+// helper: dates in range
+function getDatesInRange(from, to) {
+  const dates=[], cur=new Date(from), end=new Date(to);
+  while(cur<=end){ dates.push(cur.toISOString().split('T')[0]); cur.setDate(cur.getDate()+1); }
+  return dates;
+}
+// helper: time options based on prefs
+function buildTimeOptions(prefs) {
+  const allTimes = {
+    mattina:   [{val:'08:00',label:'08:00'},{val:'09:00',label:'09:00'},{val:'10:00',label:'10:00'},{val:'11:00',label:'11:00'}],
+    pomeriggio:[{val:'12:00',label:'12:00'},{val:'13:00',label:'13:00'},{val:'14:00',label:'14:00'},{val:'15:00',label:'15:00'},{val:'16:00',label:'16:00'}],
+    sera:      [{val:'17:00',label:'17:00'},{val:'18:00',label:'18:00'},{val:'19:00',label:'19:00'},{val:'20:00',label:'20:00'}],
+  };
+  return prefs.flatMap(p=>allTimes[p]||[]);
+}
+
+// ── ACCEPTJOB (legacy, now replaced by availability flow) ──
+function acceptJob(id, date, time, title, price) {
+  activeAppt = { id, date, time, title, price, status:'confirmed', rescheduleRequested:false };
+  closeDetailModal();
+  openAppointmentModal();
+}
+
+function acceptJob(id, date, time, title, price) {
+  const r = requests.find(x=>x.id===id);
+  activeAppt = { id, date, time, title, price, status:'confirmed', rescheduleRequested:false };
+  closeDetailModal();
+  openAppointmentModal();
+}
+
+// ── APPOINTMENT MODAL ──
+function openAppointmentModal() {
+  buildApptView('confirmed');
+  document.getElementById('apptModal').classList.add('open');
+}
+function closeApptModal() {
+  document.getElementById('apptModal').classList.remove('open');
+}
+
+function buildApptView(view) {
+  if (!activeAppt) return;
+  const { date, time, title, price } = activeAppt;
+  const net = Math.round(price * 0.9);
+  const commission = price - net;
+  const modal = document.getElementById('appt-modal-body');
+
+  // Pull contact/location from the source request
+  const r = requests.find(x=>x.id===activeAppt.id) || {};
+  const addr    = r.address  || 'Via Roma 14, Milano';
+  const interno = r.interno  || 'Terzo piano, int. 3';
+  const cMethod = r.contactMethod || 'citofono';
+  const cValue  = r.contactValue  || 'Rossi';
+  const contactHint = {
+    citofono: `🔔 Suona il campanello: <strong style="color:var(--text);">${cValue}</strong>`,
+    telefono: `📞 Numero visibile solo oggi`,
+    whatsapp: `💬 Notifica automatica AiutiAmoci all'arrivo`
+  };
+
+  if (view === 'confirmed') {
+    modal.innerHTML = `
+      <div style="margin-bottom:16px;">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:4px;">Il tuo incarico</div>
+        <div style="font-size:12px;color:var(--muted);">${title}</div>
+      </div>
+
+      <!-- WHERE + WHEN + CONTACT -->
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+        <div style="background:var(--surface2);border-radius:13px;padding:12px;display:flex;gap:12px;align-items:center;">
+          <div style="font-size:20px;width:32px;text-align:center;">📍</div>
+          <div><div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:2px;">INDIRIZZO</div>
+          <div style="font-size:13px;font-weight:600;">${addr}</div>
+          <div style="font-size:12px;color:var(--muted);">${interno}</div></div>
+        </div>
+        <div style="background:var(--surface2);border-radius:13px;padding:12px;display:flex;gap:12px;align-items:center;">
+          <div style="font-size:20px;width:32px;text-align:center;">📅</div>
+          <div><div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:2px;">DATA E ORA</div>
+          <div style="font-size:13px;font-weight:600;color:var(--accent);">${fmtDate(date)} · ${time}</div></div>
+        </div>
+        <div style="background:var(--surface2);border-radius:13px;padding:12px;display:flex;gap:12px;align-items:center;">
+          <div style="font-size:20px;width:32px;text-align:center;">🚪</div>
+          <div><div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:2px;">COME AVVISARE</div>
+          <div style="font-size:12px;">${contactHint[cMethod]||contactHint.citofono}</div></div>
+        </div>
+        <div style="background:rgba(245,200,66,0.07);border:1px solid rgba(245,200,66,0.18);border-radius:13px;padding:12px;display:flex;justify-content:space-between;align-items:center;">
+          <div><div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:2px;">💰 GUADAGNO GARANTITO</div>
+          <div style="font-size:11px;color:var(--muted);">Sbloccato dopo conferma doppia</div></div>
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--accent);">€${net}</div>
+        </div>
+      </div>
+
+      <!-- ESCROW STATUS -->
+      <div style="background:rgba(245,200,66,0.05);border:1.5px solid rgba(245,200,66,0.2);border-radius:13px;padding:13px;margin-bottom:14px;">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:8px;">🔒 STATO ESCROW</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:rgba(245,200,66,0.6);flex-shrink:0;box-shadow:0 0 8px rgba(245,200,66,0.4);animation:pulse 2s infinite;"></div>
+          <div style="font-size:12px;font-weight:600;color:var(--accent);">€${price} bloccati · in attesa del lavoro</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.5;">I fondi si sbloccano solo quando <strong style="color:var(--text)">entrambe le parti confermano</strong> il completamento.</div>
+      </div>
+
+      <button onclick="buildApptView('standby')" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg);border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px;box-shadow:0 6px 20px rgba(245,200,66,0.22);">
+        ✅ Ho completato il lavoro
+      </button>
+      <button onclick="closeApptModal();openCancelModal('aiutante')" style="width:100%;padding:12px;background:transparent;border:1px solid rgba(248,113,113,0.25);border-radius:13px;color:#f87171;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;margin-bottom:8px;">
+        ✗ Rinuncia all'incarico
+      </button>
+      <button class="btn-ghost" onclick="closeApptModal()">Chiudi</button>
+    `;
+  }
+
+  else if (view === 'standby') {
+    // Helper has confirmed — waiting for inserzionista
+    modal.innerHTML = `
+      <div style="text-align:center;padding:10px 0 20px;">
+        <div style="width:64px;height:64px;border-radius:22px;background:rgba(245,200,66,0.1);border:2px dashed var(--accent);display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 14px;animation:pulse 2s infinite;">⏳</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:6px;">In attesa dell'inserzionista</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;">Hai confermato il completamento.<br>I fondi restano bloccati finché anche l'inserzionista non conferma.</div>
+      </div>
+
+      <!-- DOPPIA CONFERMA STATUS -->
+      <div style="background:var(--surface2);border-radius:14px;padding:16px;margin-bottom:14px;">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:12px;">✅ STATO CONFERME</div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:28px;height:28px;border-radius:9px;background:rgba(74,222,128,0.15);border:1.5px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:13px;">✓</div>
+              <div style="font-size:13px;font-weight:500;">Tu (Aiutante)</div>
+            </div>
+            <div style="font-size:11px;font-weight:600;color:var(--green);background:rgba(74,222,128,0.1);padding:3px 8px;border-radius:6px;">CONFERMATO</div>
+          </div>
+          <div style="height:1px;background:var(--border);"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:28px;height:28px;border-radius:9px;background:rgba(245,200,66,0.08);border:1.5px dashed rgba(245,200,66,0.4);display:flex;align-items:center;justify-content:center;font-size:13px;animation:pulse 2s infinite;">⏳</div>
+              <div style="font-size:13px;font-weight:500;color:var(--muted);">${r.user || 'Inserzionista'}</div>
+            </div>
+            <div style="font-size:11px;font-weight:600;color:var(--muted);background:var(--surface);padding:3px 8px;border-radius:6px;">IN ATTESA</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ESCROW STANDBY -->
+      <div style="background:rgba(245,200,66,0.05);border:1.5px solid rgba(245,200,66,0.2);border-radius:13px;padding:13px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-size:10px;color:var(--muted);font-weight:600;">🔒 FONDI IN STANDBY</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--accent);">€${price}</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.5;">Il pagamento partirà automaticamente appena l'inserzionista conferma.</div>
+      </div>
+
+      <!-- SIMULATE inserzionista confirm -->
+      <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px;font-weight:600;">— Simula risposta inserzionista —</div>
+      <button onclick="buildApptView('bothconfirmed')" style="width:100%;padding:12px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);border-radius:12px;color:var(--green);font-family:'Syne',sans-serif;font-weight:600;font-size:13px;cursor:pointer;margin-bottom:8px;">
+        ✓ L'inserzionista conferma il completamento
+      </button>
+      <button onclick="buildApptView('dispute')" style="width:100%;padding:12px;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.18);border-radius:12px;color:#f87171;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;margin-bottom:8px;">
+        ✗ L'inserzionista apre una contestazione
+      </button>
+      <button class="btn-ghost" onclick="closeApptModal()">Chiudi</button>
+    `;
+  }
+
+  else if (view === 'bothconfirmed') {
+    // Save completed job to reputation before showing feedback
+    _completedJobForFeedback = {
+      jobId:    activeAppt.id,
+      jobTitle: title,
+      otherName: (requests.find(x=>x.id===activeAppt.id)||{}).user || 'Inserzionista',
+      price, net, commission
+    };
+
+    modal.innerHTML = `
+      <div style="text-align:center;padding:12px 0;">
+        <div style="width:72px;height:72px;border-radius:24px;background:rgba(74,222,128,0.15);border:2px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 16px;animation:scaleIn 0.4s cubic-bezier(0.34,1.56,0.64,1);">💸</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;margin-bottom:6px;color:var(--green);">Fondi sbloccati!</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px;">Entrambe le parti hanno confermato.<br>Il pagamento è in arrivo sul tuo wallet.</div>
+
+        <div style="background:var(--surface2);border-radius:14px;padding:16px;text-align:left;margin-bottom:14px;">
+          <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:12px;">💳 RIEPILOGO PAGAMENTO</div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <span style="color:var(--muted);font-size:13px;">Compenso totale bloccato</span>
+            <span style="font-size:13px;font-weight:500;">€${price}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <span style="color:var(--muted);font-size:13px;">→ Commissione AiutiAmoci (10%)</span>
+            <span style="font-size:13px;color:#f87171;">−€${commission}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <span style="color:var(--muted);font-size:13px;">→ Costi Stripe (~2%)</span>
+            <span style="font-size:13px;color:rgba(248,113,113,0.6);">−€${Math.round(price*0.02)}</span>
+          </div>
+          <div style="height:1px;background:var(--border);margin:10px 0;"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;">Ricevi sul wallet</span>
+            <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:28px;color:var(--accent);">€${net}</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:20px;font-size:12px;color:var(--muted);">
+          <div style="text-align:center;"><div style="font-size:20px;margin-bottom:3px;">🏦</div><div>Escrow</div></div>
+          <div style="flex:1;height:2px;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:2px;"></div>
+          <div style="text-align:center;"><div style="font-size:20px;margin-bottom:3px;">👛</div><div>Il tuo wallet</div></div>
+          <div style="width:2px;height:24px;background:var(--border);"></div>
+          <div style="text-align:center;"><div style="font-size:20px;margin-bottom:3px;">🏢</div><div>AiutiAmoci</div></div>
+        </div>
+
+        <div style="background:rgba(245,200,66,0.07);border:1.5px solid rgba(245,200,66,0.25);border-radius:13px;padding:13px;margin-bottom:16px;text-align:left;">
+          <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px;">⭐ UN ULTIMO PASSO</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.5;">Prima di andare, lascia una valutazione a <strong style="color:var(--text);">${_completedJobForFeedback.otherName}</strong>. Ci vogliono 10 secondi e aiuta tutta la community.</div>
+        </div>
+
+        <button onclick="closeApptModal(); openFeedbackModal(_completedJobForFeedback);" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg);border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:8px;box-shadow:0 6px 20px rgba(245,200,66,0.2);">
+          ⭐ Valuta ${_completedJobForFeedback.otherName} →
+        </button>
+        <button class="btn-ghost" onclick="closeApptModal();showToast('💳 €${net} accreditati sul tuo wallet!')">Vai al Wallet (salta)</button>
+      </div>
+    `;
+  }
+
+  else if (view === 'dispute') {
+    modal.innerHTML = `
+      <div style="text-align:center;padding:10px 0 18px;">
+        <div style="font-size:44px;margin-bottom:12px;">⚖️</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:6px;">Contestazione aperta</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px;">L'inserzionista non ha confermato il completamento.<br>AiutiAmoci esaminerà la situazione entro 48h.</div>
+      </div>
+      <div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:13px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:10px;font-weight:600;color:#f87171;margin-bottom:8px;">⚠️ FONDI IN ATTESA — €${price}</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;">I fondi restano bloccati finché AiutiAmoci non risolve la contestazione. Il nostro team ti contatterà entro 48 ore.</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:13px;padding:13px;margin-bottom:16px;font-size:12px;color:var(--muted);line-height:1.7;">
+        📋 <strong style="color:var(--text);">Come funziona la contestazione:</strong><br>
+        1. Invia prove (foto, messaggi in-app)<br>
+        2. Il team AiutiAmoci esamina entro 48h<br>
+        3. Decisione vincolante: fondi all'aiutante o rimborso all'inserzionista
+      </div>
+      <button onclick="showToast('📧 Richiesta inviata a AiutiAmoci Support');closeApptModal();" style="width:100%;padding:13px;background:var(--surface2);border:1px solid rgba(248,113,113,0.3);border-radius:13px;color:#f87171;font-family:'DM Sans',sans-serif;font-weight:600;font-size:14px;cursor:pointer;margin-bottom:8px;">
+        📎 Invia prove a AiutiAmoci
+      </button>
+      <button class="btn-ghost" onclick="closeApptModal()">Chiudi</button>
+    `;
+  }
+}
+
+function sendReschedule() {
+  const nd = document.getElementById('new-date')?.value;
+  const nt = document.getElementById('new-time')?.value;
+  if (!nd || !nt) { showToast('⚠️ Seleziona data e ora'); return; }
+  showToast('📨 Proposta inviata all\'inserzionista');
+  closeApptModal();
+}
+
+function simulateResponse(response, nd, nt) {
+  if (response === 'accept') {
+    activeAppt.date = nd; activeAppt.time = nt;
+    buildApptView('confirmed');
+    showToast('✅ Modifica accettata!');
+  } else {
+    buildApptView('confirmed');
+    showToast('❌ Modifica rifiutata. Data originale confermata.');
+  }
+}
+
+// ── NEW REQUEST ──
+function toggleTimeChip(el, val) {
+  el.classList.toggle('active');
+}
+
+function openNewRequest(){
+  buildTagsUI(selectedCat);
+  document.getElementById('newModal').classList.add('open');
+  const today  = new Date().toISOString().split('T')[0];
+  const inWeek = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+  document.getElementById('req-date-from').value = today;
+  document.getElementById('req-date-to').value   = inWeek;
+}
+function closeNewModal(){ document.getElementById('newModal').classList.remove('open'); }
+
+// ── INCARICHI DATA (demo) ──
+// In produzione questi vengono da Supabase filtrati per currentUser
+const demoIncarichi = {
+  // Richieste pubblicate dall'utente come inserzionista
+  richieste: [
+    {
+      id:'r1', title:'🚛 Trasloco appartamento', cat:'trasloco', price:180,
+      status:'slot_scelto', // attesa conferma aiutante
+      date:'2026-03-18', timeLabel:'Mattina (8–12)',
+      aiutante:'Marco B.', aiutanteStars:4.5, aiutanteJobs:12, aiutanteRel:94,
+      tags:'Appartamento intero · 3° o superiore · Oggetti fragili'
+    },
+    {
+      id:'r2', title:'💻 Config PC e rete', cat:'informatica', price:45,
+      status:'attesa_aiutante',
+      date:'2026-03-20', timeLabel:'Pomeriggio (12–17)',
+      aiutante:null,
+      tags:'PC/Laptop · Configurazione iniziale · Windows'
+    },
+  ],
+  // Lavori accettati dall'utente come aiutante
+  aiutante: [
+    {
+      id:'a1', title:'🪑 Montaggio cucina IKEA', cat:'montaggio', price:90,
+      status:'confermato',
+      date:'2026-03-19', timeLabel:'Mattina (8–12)',
+      inserzionista:'Sofia M.', inseStars:4.8, inseJobs:6, inseRel:100,
+      address:'Corso Buenos Aires 14 — rivelato dopo conferma',
+      tags:'Cucina componibile · 9+ elementi · Fissaggio a parete'
+    },
+    {
+      id:'a2', title:'🏠 Potatura giardino', cat:'casa', price:55,
+      status:'slot_proposto', // hai proposto slot, aspetti risposta
+      date:null, timeLabel:null,
+      inserzionista:'Roberto V.', inseStars:4.2, inseJobs:3, inseRel:85,
+      tags:'Potatura/giardino · 2–4 ore'
+    },
+  ],
+  // Storico conclusi (entrambi i ruoli)
+  conclusi: [
+    {
+      id:'c1', title:'🚗 Accompagnamento visita', cat:'accompagnamento', price:35,
+      ruolo:'aiutante', data:'8 Mar 2026',
+      controparte:'Anna P.', stars:5,
+      guadagno: 29, // netto dopo commissioni
+    },
+    {
+      id:'c2', title:'🧹 Pulizia post-trasloco', cat:'pulizie', price:80,
+      ruolo:'inserzionista', data:'2 Mar 2026',
+      controparte:'Luca B.', stars:4,
+      guadagno: null,
+    },
+    {
+      id:'c3', title:'💻 Setup smartphone', cat:'informatica', price:30,
+      ruolo:'aiutante', data:'22 Feb 2026',
+      controparte:'Maria T.', stars:5,
+      guadagno: 25,
+    },
+  ]
+};
+
+let currentIncTab = 'richieste';
+
+function openIncarichiModal() {
+  currentIncTab = 'richieste';
+  renderIncTab('richieste');
+  document.getElementById('incarichiModal').classList.add('open');
+}
+function closeIncarichiModal() {
+  document.getElementById('incarichiModal').classList.remove('open');
+}
+
+function switchIncTab(tab) {
+  currentIncTab = tab;
+  ['richieste','aiutante','conclusi'].forEach(t => {
+    const el = document.getElementById('inc-tab-'+t);
+    if(t === tab) {
+      el.style.background = 'var(--accent)';
+      el.style.color      = 'var(--bg)';
+    } else {
+      el.style.background = 'transparent';
+      el.style.color      = 'var(--muted)';
+    }
+  });
+  renderIncTab(tab);
+}
+
+function incStatusBadge(status) {
+  const map = {
+    attesa_aiutante: { label:'In attesa di aiutante', color:'#60a5fa', bg:'rgba(96,165,250,0.1)' },
+    slot_proposto:   { label:'Slot proposto — in attesa', color:'#fbbf24', bg:'rgba(251,191,36,0.1)' },
+    slot_scelto:     { label:'Slot scelto — confermato', color:'#34d399', bg:'rgba(52,211,153,0.1)' },
+    confermato:      { label:'● In svolgimento', color:'var(--green)', bg:'rgba(74,222,128,0.1)' },
+  };
+  const s = map[status] || { label: status, color:'var(--muted)', bg:'var(--surface2)' };
+  return `<span style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;
+    background:${s.bg};color:${s.color};">${s.label}</span>`;
+}
+
+function miniRepBadge(stars, jobs, rel) {
+  const col = rel >= 90 ? 'var(--green)' : rel >= 75 ? 'var(--accent)' : '#f87171';
+  return `<span style="font-size:11px;color:var(--accent);font-weight:600;">★ ${stars}</span>
+    <span style="font-size:10px;color:${col};margin-left:4px;">${jobs} att. · ${rel}% pres.</span>`;
+}
+
+function renderIncTab(tab) {
+  const body = document.getElementById('inc-body');
+  const items = demoIncarichi[tab];
+
+  if(!items || items.length === 0) {
+    body.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;">
+        <div style="font-size:40px;margin-bottom:12px;">${tab==='conclusi'?'📭':'🕐'}</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Nessun elemento</div>
+        <div style="font-size:12px;color:var(--muted);">
+          ${tab==='richieste' ? 'Non hai ancora pubblicato richieste.' :
+            tab==='aiutante'  ? 'Non hai ancora accettato incarichi.' :
+                                'Il tuo riepilogo è vuoto.'}
+        </div>
+      </div>`;
+    return;
+  }
+
+  if(tab === 'richieste') {
+    body.innerHTML = items.map(r => `
+      <div style="background:var(--surface2);border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid ${catColors[r.cat]||'var(--accent)'};">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:8px;">
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;flex:1;">${r.title}</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);flex-shrink:0;">€${r.price}</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${r.tags}</div>
+        <div style="margin-bottom:10px;">${incStatusBadge(r.status)}</div>
+
+        ${r.aiutante ? `
+        <div style="background:var(--card);border-radius:10px;padding:10px;display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+            display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:13px;color:var(--bg);flex-shrink:0;">
+            ${r.aiutante.split(' ').map(w=>w[0]).join('')}
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:2px;">${r.aiutante}</div>
+            <div>${miniRepBadge(r.aiutanteStars, r.aiutanteJobs, r.aiutanteRel)}</div>
+          </div>
+        </div>
+
+        ${r.date ? `<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">📅 ${r.date} · ${r.timeLabel}</div>` : ''}
+
+        ${(r.status === 'slot_scelto' || r.status === 'confermato') ? `
+          <!-- Slot già confermato → Concludi + Annulla con penali -->
+          <div style="display:flex;gap:8px;">
+            <button onclick="incConcludi('${r.id}')"
+              style="flex:1;padding:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg);
+              border:none;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">
+              ✅ Concludi
+            </button>
+            <button onclick="incAnnulla('${r.id}','inserzionista',${r.price},'${r.date}')"
+              style="flex:1;padding:10px;background:rgba(248,113,113,0.1);color:#f87171;
+              border:1px solid rgba(248,113,113,0.25);border-radius:10px;
+              font-family:'Syne',sans-serif;font-weight:600;font-size:13px;cursor:pointer;">
+              ✕ Annulla
+            </button>
+          </div>` : `
+          <!-- Slot proposto → Conferma + Rifiuta -->
+          <div style="display:flex;gap:8px;">
+            <button onclick="incConfermaSlot('${r.id}')"
+              style="flex:1;padding:10px;background:var(--green);color:var(--bg);border:none;
+              border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">
+              Conferma slot
+            </button>
+            <button onclick="incRifiutaSlot('${r.id}')"
+              style="flex:1;padding:10px;background:rgba(248,113,113,0.1);color:#f87171;
+              border:1px solid rgba(248,113,113,0.2);border-radius:10px;
+              font-family:'Syne',sans-serif;font-weight:600;font-size:13px;cursor:pointer;">
+              Rifiuta
+            </button>
+          </div>`}
+        ` : `
+        <div style="font-size:11px;color:var(--muted);font-style:italic;padding:8px 0;">
+          Nessun aiutante ancora — la richiesta è visibile sulla mappa.
+        </div>`}
+
+        ${!r.aiutante && r.date ? `<div style="margin-top:6px;font-size:11px;color:var(--muted);">📅 ${r.date} · ${r.timeLabel}</div>` : ''}
+      </div>`).join('');
+
+  } else if(tab === 'aiutante') {
+    body.innerHTML = items.map(a => `
+      <div style="background:var(--surface2);border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid ${catColors[a.cat]||'var(--accent)'};">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:8px;">
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;flex:1;">${a.title}</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);flex-shrink:0;">€${a.price}</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${a.tags}</div>
+        <div style="margin-bottom:10px;">${incStatusBadge(a.status)}</div>
+
+        <div style="background:var(--card);border-radius:10px;padding:10px;display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <div style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#60a5fa,#a78bfa);
+            display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:13px;color:#0a0f18;flex-shrink:0;">
+            ${a.inserzionista.split(' ').map(w=>w[0]).join('')}
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:1px;">Inserzionista</div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:2px;">${a.inserzionista}</div>
+            <div>${miniRepBadge(a.inseStars, a.inseJobs, a.inseRel)}</div>
+          </div>
+        </div>
+
+        ${a.status === 'confermato' ? `
+        <div style="background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:10px;font-size:12px;margin-bottom:10px;">
+          <div style="font-size:10px;font-weight:600;color:var(--green);margin-bottom:4px;">📍 LUOGO CONFERMATO</div>
+          <div style="color:var(--muted);">${a.address}</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);">📅 ${a.date} · ${a.timeLabel}</div>
+        <button onclick="showToast('💼 Apri incarico attivo')" style="width:100%;margin-top:10px;padding:10px;background:var(--accent);color:var(--bg);border:none;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">Apri incarico →</button>
+        ` : `
+        <div style="font-size:11px;color:var(--muted);font-style:italic;">In attesa che l'inserzionista scelga uno dei tuoi slot proposti.</div>`}
+      </div>`).join('');
+
+  } else if(tab === 'conclusi') {
+    body.innerHTML = `
+      <div style="font-size:10px;font-weight:600;color:var(--muted);letter-spacing:0.6px;margin-bottom:10px;">RIEPILOGO ATTIVITÀ</div>
+      ${items.map(c => {
+        const isAiutante = c.ruolo === 'aiutante';
+        const accentCol  = isAiutante ? 'var(--green)' : '#60a5fa';
+        const roleLabel  = isAiutante ? '🔧 Come aiutante' : '📋 Come inserzionista';
+        const stars = '★'.repeat(c.stars) + '☆'.repeat(5-c.stars);
+        return `
+        <div style="background:var(--surface2);border-radius:14px;padding:14px;margin-bottom:10px;
+          border-left:3px solid ${catColors[c.cat]||'var(--accent)'};">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;gap:8px;">
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;flex:1;">${c.title}</div>
+            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;color:var(--accent);flex-shrink:0;">€${c.price}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+            <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(74,222,128,0.1);color:var(--green);">✅ Completato</span>
+            <span style="font-size:10px;color:var(--muted);">${roleLabel}</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+            <div>
+              <div style="font-size:11px;color:var(--muted);">Con ${c.controparte}</div>
+              <div style="font-size:12px;color:var(--accent);margin-top:2px;">${stars} ${c.stars}.0</div>
+            </div>
+            <div style="text-align:right;">
+              ${isAiutante ? `<div style="font-size:11px;color:var(--muted);">Guadagno netto</div>
+                <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--green);">+€${c.guadagno}</div>` :
+                `<div style="font-size:11px;color:var(--muted);">Compenso pagato</div>
+                <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#f87171;">−€${c.price}</div>`}
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">${c.data}</div>
+        </div>`;
+      }).join('')}`;
+  }
+}
+
+// ── AZIONI INCARICHI (tab Richieste) ──
+
+function incConfermaSlot(id) {
+  const r = demoIncarichi.richieste.find(x=>x.id===id);
+  if(!r) return;
+  r.status = 'slot_scelto';
+  confirmedJobIds.add(parseInt(id.replace('r','')));
+  renderIncTab('richieste');
+  render();
+  showToast('✅ Slot confermato! Indirizzo rivelato all\'aiutante.');
+}
+
+function incRifiutaSlot(id) {
+  const r = demoIncarichi.richieste.find(x=>x.id===id);
+  if(!r) return;
+  r.status = 'attesa_aiutante';
+  r.aiutante = null;
+  renderIncTab('richieste');
+  showToast('❌ Slot rifiutato — l\'aiutante può riproporre altri orari.');
+}
+
+function incConcludi(id) {
+  const r = demoIncarichi.richieste.find(x=>x.id===id);
+  if(!r) return;
+  // Mostra conferma prima di concludere
+  openIncConludiModal(r);
+}
+
+function openIncConludiModal(r) {
+  const commission = Math.round(r.price * 0.10);
+  const net = r.price - commission;
+  const m = document.getElementById('inc-concludi-modal');
+  if(!m) return;
+  document.getElementById('inc-concludi-body').innerHTML = `
+    <div style="text-align:center;margin-bottom:18px;">
+      <div style="width:60px;height:60px;border-radius:20px;background:rgba(74,222,128,0.15);border:2px solid var(--green);
+        display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px;">✅</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px;margin-bottom:4px;">Confermi il completamento?</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;">
+        Stai confermando che il lavoro <strong style="color:var(--text);">${r.title}</strong> è stato completato da <strong style="color:var(--text);">${r.aiutante}</strong>.
+      </div>
+    </div>
+    <div style="background:var(--surface2);border-radius:12px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:10px;">💸 MOVIMENTO FONDI</div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:13px;color:var(--muted);">Fondi in escrow</span>
+        <span style="font-size:13px;">€${r.price}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:13px;color:var(--muted);">→ Commissione AiutiAmoci (10%)</span>
+        <span style="font-size:13px;color:#f87171;">−€${commission}</span>
+      </div>
+      <div style="height:1px;background:var(--border);margin:8px 0;"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;font-weight:600;">Rilasciato all'aiutante</span>
+        <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--green);">€${net}</span>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);background:rgba(245,200,66,0.06);border:1px solid rgba(245,200,66,0.15);
+      border-radius:10px;padding:10px;margin-bottom:16px;line-height:1.6;">
+      ⚠️ La conferma è definitiva. Se hai dubbi sul lavoro svolto usa <strong style="color:var(--accent);">Contesta</strong> invece di Concludi.
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="doConcludi('${r.id}')"
+        style="flex:2;padding:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg);
+        border:none;border-radius:12px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">
+        ✅ Confermo — Concludi
+      </button>
+      <button onclick="document.getElementById('inc-concludi-modal').classList.remove('open')"
+        style="flex:1;padding:13px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);
+        border-radius:12px;font-family:'Syne',sans-serif;font-weight:600;font-size:13px;cursor:pointer;">
+        Annulla
+      </button>
+    </div>`;
+  m.classList.add('open');
+}
+
+function doConcludi(id) {
+  document.getElementById('inc-concludi-modal').classList.remove('open');
+  const r = demoIncarichi.richieste.find(x=>x.id===id);
+  if(r) {
+    // Sposta in conclusi
+    demoIncarichi.conclusi.unshift({
+      id:'c'+Date.now(), title: r.title, cat: r.cat, price: r.price,
+      ruolo:'inserzionista', data: new Date().toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'}),
+      controparte: r.aiutante, stars: 0, guadagno: null
+    });
+    demoIncarichi.richieste = demoIncarichi.richieste.filter(x=>x.id!==id);
+  }
+  closeIncarichiModal();
+  setTimeout(()=>{ openIncarichiModal(); switchIncTab('conclusi'); }, 200);
+  showToast('✅ Lavoro concluso! Fondi rilasciati.');
+}
+
+function incAnnulla(id, ruolo, price, dateStr) {
+  // Calcola se siamo entro 24h dall'inizio
+  const jobDate = new Date(dateStr);
+  const now     = new Date();
+  const diffH   = (jobDate - now) / 3600000; // ore alla data lavoro
+  const late    = diffH < 24; // meno di 24h → penale
+  const commission = Math.round(price * 0.10);
+
+  const m = document.getElementById('inc-annulla-modal');
+  if(!m) return;
+  document.getElementById('inc-annulla-body').innerHTML = `
+    <div style="text-align:center;margin-bottom:18px;">
+      <div style="font-size:44px;margin-bottom:10px;">⚠️</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px;margin-bottom:6px;">Annulla richiesta</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;">
+        ${late
+          ? `L'appuntamento è <strong style="color:#f87171;">tra meno di 24 ore</strong>. Si applica una penale.`
+          : `L'appuntamento è tra più di 24 ore. Nessuna penale applicata.`}
+      </div>
+    </div>
+
+    ${late ? `
+    <div style="background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);border-radius:12px;padding:14px;margin-bottom:14px;">
+      <div style="font-size:10px;font-weight:600;color:#f87171;margin-bottom:10px;">💸 RIEPILOGO PENALE</div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:13px;color:var(--muted);">Fondi in escrow</span>
+        <span style="font-size:13px;">€${price}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:13px;color:var(--muted);">Commissione trattenuta (penale)</span>
+        <span style="font-size:13px;color:#f87171;">−€${commission}</span>
+      </div>
+      <div style="height:1px;background:var(--border);margin:8px 0;"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;font-weight:600;">Ti viene rimborsato</span>
+        <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--accent);">€${price - commission}</span>
+      </div>
+    </div>` : `
+    <div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.18);border-radius:12px;padding:14px;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;font-weight:600;">Rimborso completo</span>
+        <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--green);">€${price}</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;">Nessuna commissione trattenuta — cancellazione in tempo.</div>
+    </div>`}
+
+    <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:16px;">
+      L'aiutante verrà notificato immediatamente. ${late ? 'La penale non è contestabile per cancellazioni tardive.' : ''}
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="doAnnullaRichiesta('${id}')"
+        style="flex:2;padding:13px;background:rgba(248,113,113,0.12);color:#f87171;
+        border:1px solid rgba(248,113,113,0.3);border-radius:12px;
+        font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">
+        Sì, annulla
+      </button>
+      <button onclick="document.getElementById('inc-annulla-modal').classList.remove('open')"
+        style="flex:1;padding:13px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);
+        border-radius:12px;font-family:'Syne',sans-serif;font-weight:600;font-size:13px;cursor:pointer;">
+        Indietro
+      </button>
+    </div>`;
+  m.classList.add('open');
+}
+
+function doAnnullaRichiesta(id) {
+  document.getElementById('inc-annulla-modal').classList.remove('open');
+  demoIncarichi.richieste = demoIncarichi.richieste.filter(x=>x.id!==id);
+  closeIncarichiModal();
+  setTimeout(openIncarichiModal, 200);
+  showToast('🚫 Richiesta annullata — rimborso in arrivo.');
+}
+function showMyRequests() { requireAuth('Incarichi', openIncarichiModal); }
+function showMyJobs()     { requireAuth('Incarichi', openIncarichiModal); }
+// ── WALLET DATA ──
+const walletData = {
+  saldo: 54.00,
+  escrow: 225.00, // fondi congelati (somma richieste attive)
+  metodo: null,   // null = non configurato | { tipo:'iban', valore:'IT60...' } | { tipo:'paypal', valore:'email' }
+  movimenti: [
+    { id:'m1', tipo:'guadagno',  desc:'Accompagnamento visita — Anna P.',   importo:+29.00, data:'8 Mar 2026',  stato:'completato' },
+    { id:'m2', tipo:'guadagno',  desc:'Setup smartphone — Maria T.',         importo:+25.00, data:'22 Feb 2026', stato:'completato' },
+    { id:'m3', tipo:'prelievo',  desc:'Prelievo su IBAN •••• 4521',          importo:-40.00, data:'18 Feb 2026', stato:'completato' },
+    { id:'m4', tipo:'pagamento', desc:'Hai pubblicato: Trasloco 3 locali',   importo:-180.00,data:'14 Feb 2026', stato:'in_escrow'   },
+    { id:'m5', tipo:'pagamento', desc:'Hai pubblicato: Config PC',           importo:-45.00, data:'10 Feb 2026', stato:'in_escrow'   },
+    { id:'m6', tipo:'guadagno',  desc:'Pulizia post-trasloco — Luca B.',     importo:+66.00, data:'2 Feb 2026',  stato:'completato' },
+    { id:'m7', tipo:'ricarica',  desc:'Ricarica wallet',                     importo:+200.00,data:'1 Feb 2026',  stato:'completato' },
+  ]
+};
+
+function openWalletModal() {
+  buildWalletView();
+  document.getElementById('walletModal').classList.add('open');
+}
+function closeWalletModal() { document.getElementById('walletModal').classList.remove('open'); }
+function showWallet() { requireAuth('Wallet', openWalletModal); }
+
+function buildWalletView() {
+  const w = walletData;
+  const metodoLabel = w.metodo
+    ? (w.metodo.tipo === 'iban' ? '🏦 IBAN •••• '+w.metodo.valore.slice(-4) : '💙 PayPal '+w.metodo.valore)
+    : null;
+
+  document.getElementById('wallet-body').innerHTML = `
+
+    <!-- SALDO DISPONIBILE -->
+    <div style="background:linear-gradient(135deg,rgba(245,200,66,0.12),rgba(255,107,53,0.08));
+      border:1.5px solid rgba(245,200,66,0.25);border-radius:18px;padding:22px 20px;margin-bottom:12px;text-align:center;">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0.8px;margin-bottom:8px;">SALDO DISPONIBILE</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:48px;color:var(--accent);line-height:1;">
+        €${w.saldo.toFixed(2)}
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;">Fondi pronti per il prelievo</div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button onclick="openPrelievoModal()"
+          style="flex:1;padding:12px;background:var(--accent);color:var(--bg);
+          border:none;border-radius:12px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;
+          ${w.saldo <= 0 ? 'opacity:0.4;pointer-events:none;' : ''}">
+          ↑ Preleva
+        </button>
+        <button onclick="openRicaricaModal()"
+          style="flex:1;padding:12px;background:rgba(74,222,128,0.12);color:var(--green);
+          border:1.5px solid rgba(74,222,128,0.25);border-radius:12px;
+          font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">
+          ↓ Ricarica
+        </button>
+      </div>
+      ${!w.metodo ? `
+      <div style="font-size:11px;color:#fbbf24;margin-top:8px;">
+        ⚠️ Nessun metodo di prelievo configurato — <span style="text-decoration:underline;cursor:pointer;" onclick="openPrelievoModal()">configura ora</span>
+      </div>` : `
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;">Prelievo verso: ${metodoLabel}</div>`}
+    </div>
+
+    <!-- FONDI IN ESCROW -->
+    <div style="background:rgba(96,165,250,0.07);border:1px solid rgba(96,165,250,0.2);
+      border-radius:14px;padding:14px 16px;margin-bottom:18px;display:flex;align-items:center;gap:14px;">
+      <div style="font-size:28px;">🔒</div>
+      <div style="flex:1;">
+        <div style="font-size:11px;font-weight:600;color:#60a5fa;letter-spacing:0.6px;margin-bottom:3px;">FONDI CONGELATI</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:#60a5fa;">€${w.escrow.toFixed(2)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">In escrow per richieste attive — rilasciati al completamento</div>
+      </div>
+    </div>
+
+    <!-- STORICO MOVIMENTI -->
+    <div style="font-size:10px;font-weight:600;color:var(--muted);letter-spacing:0.8px;margin-bottom:10px;">STORICO MOVIMENTI</div>
+    ${w.movimenti.map(m => {
+      const pos = m.importo > 0;
+      const col = m.stato === 'in_escrow' ? '#60a5fa' : pos ? 'var(--green)' : '#f87171';
+      const icon = m.tipo === 'guadagno' ? '↓' : m.tipo === 'prelievo' ? '↑' : m.tipo === 'ricarica' ? '＋' : '🔒';
+      const statoLabel = m.stato === 'in_escrow' ? ' · in escrow' : '';
+      return `
+      <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);">
+        <div style="width:34px;height:34px;border-radius:10px;background:${col}18;
+          display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:${col};flex-shrink:0;">
+          ${icon}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.desc}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${m.data}${statoLabel}</div>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px;color:${col};flex-shrink:0;">
+          ${pos ? '+' : ''}€${Math.abs(m.importo).toFixed(2)}
+        </div>
+      </div>`}).join('')}
+    <div style="height:8px;"></div>
+  `;
+}
+
+// ── PRELIEVO MODAL ──
+function openPrelievoModal() {
+  buildPrelievoView();
+  document.getElementById('prelievoModal').classList.add('open');
+}
+function closePrelievoModal() { document.getElementById('prelievoModal').classList.remove('open'); }
+
+function buildPrelievoView() {
+  const w = walletData;
+  document.getElementById('prelievo-body').innerHTML = `
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px;margin-bottom:4px;">Preleva fondi</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:18px;">Saldo disponibile: <strong style="color:var(--accent);">€${w.saldo.toFixed(2)}</strong></div>
+
+    <!-- IMPORTO -->
+    <div class="field-wrap" style="margin-bottom:14px;">
+      <div class="field-label">Importo (€)</div>
+      <div class="price-wrap">
+        <span class="price-symbol">€</span>
+        <input class="field-input" type="number" id="prelievo-importo" placeholder="${w.saldo.toFixed(2)}"
+          max="${w.saldo}" step="0.01" style="padding-left:28px;"/>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        ${[10,25,50].map(v=>`
+          <button onclick="document.getElementById('prelievo-importo').value=${Math.min(v,w.saldo).toFixed(2)}"
+            style="flex:1;padding:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+            font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;">€${v}</button>
+        `).join('')}
+        <button onclick="document.getElementById('prelievo-importo').value=${w.saldo.toFixed(2)}"
+          style="flex:1;padding:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+          font-size:12px;font-weight:600;color:var(--accent);cursor:pointer;">Tutto</button>
+      </div>
+    </div>
+
+    <!-- METODO -->
+    <div class="field-label" style="margin-bottom:8px;">Metodo di prelievo</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;" id="metodo-list">
+      <div id="opt-iban" onclick="selectMetodo('iban')"
+        style="background:var(--surface2);border:1.5px solid ${w.metodo?.tipo==='iban'?'var(--accent)':'var(--border)'};
+        border-radius:12px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:border-color 0.2s;">
+        <span style="font-size:22px;">🏦</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;">Bonifico IBAN</div>
+          <div style="font-size:11px;color:var(--muted);">${w.metodo?.tipo==='iban' ? 'IBAN: '+w.metodo.valore : 'Non configurato'}</div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:50%;border:2px solid ${w.metodo?.tipo==='iban'?'var(--accent)':'var(--border)'};
+          background:${w.metodo?.tipo==='iban'?'var(--accent)':'transparent'};display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--bg);">
+          ${w.metodo?.tipo==='iban'?'✓':''}
+        </div>
+      </div>
+      <div id="opt-paypal" onclick="selectMetodo('paypal')"
+        style="background:var(--surface2);border:1.5px solid ${w.metodo?.tipo==='paypal'?'var(--accent)':'var(--border)'};
+        border-radius:12px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:border-color 0.2s;">
+        <span style="font-size:22px;">💙</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;">PayPal</div>
+          <div style="font-size:11px;color:var(--muted);">${w.metodo?.tipo==='paypal' ? w.metodo.valore : 'Non configurato'}</div>
+        </div>
+        <div style="width:18px;height:18px;border-radius:50%;border:2px solid ${w.metodo?.tipo==='paypal'?'var(--accent)':'var(--border)'};
+          background:${w.metodo?.tipo==='paypal'?'var(--accent)':'transparent'};display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--bg);">
+          ${w.metodo?.tipo==='paypal'?'✓':''}
+        </div>
+      </div>
+    </div>
+
+    <!-- INPUT METODO (appare dopo selezione) -->
+    <div id="metodo-input-wrap" style="display:${w.metodo?'block':'none'};margin-bottom:16px;">
+      <div class="field-label" id="metodo-input-label">${w.metodo?.tipo==='iban'?'Inserisci IBAN':'Email PayPal'}</div>
+      <input class="field-input" id="metodo-input-value"
+        placeholder="${w.metodo?.tipo==='iban'?'IT60 X054 2811 1010 0000 0123 456':'nome@email.com'}"
+        value="${w.metodo?.valore||''}"/>
+    </div>
+
+    <button onclick="doPrelievo()"
+      style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg);
+      border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:8px;">
+      Conferma prelievo →
+    </button>
+    <button class="btn-ghost" onclick="closePrelievoModal()">Annulla</button>
+  `;
+}
+
+let _selectedMetodo = walletData.metodo?.tipo || null;
+
+function selectMetodo(tipo) {
+  _selectedMetodo = tipo;
+  ['iban','paypal'].forEach(t => {
+    const el = document.getElementById('opt-'+t);
+    const dot = el?.querySelector('div:last-child');
+    if(!el || !dot) return;
+    const active = t === tipo;
+    el.style.borderColor   = 'var(--border)';
+    dot.style.borderColor  = active ? 'var(--accent)' : 'var(--border)';
+    dot.style.background   = active ? 'var(--accent)' : 'transparent';
+    dot.textContent        = active ? '✓' : '';
+  });
+  // Show input
+  const wrap  = document.getElementById('metodo-input-wrap');
+  const label = document.getElementById('metodo-input-label');
+  const input = document.getElementById('metodo-input-value');
+  if(wrap) wrap.style.display = 'block';
+  if(label) label.textContent = tipo === 'iban' ? 'Inserisci IBAN' : 'Email PayPal';
+  if(input) {
+    input.placeholder = tipo === 'iban' ? 'IT60 X054 2811 1010 0000 0123 456' : 'nome@email.com';
+    input.value = (walletData.metodo?.tipo === tipo) ? walletData.metodo.valore : '';
+  }
+}
+
+function doPrelievo() {
+  const importo = parseFloat(document.getElementById('prelievo-importo')?.value);
+  const valore  = document.getElementById('metodo-input-value')?.value?.trim();
+
+  if(!_selectedMetodo)       { showToast('⚠️ Seleziona un metodo di prelievo'); return; }
+  if(!valore)                { showToast('⚠️ Inserisci '+(_selectedMetodo==='iban'?'IBAN':'email PayPal')); return; }
+  if(!importo || importo<=0) { showToast('⚠️ Inserisci un importo valido'); return; }
+  if(importo > walletData.saldo) { showToast('⚠️ Importo superiore al saldo'); return; }
+
+  // Salva metodo
+  walletData.metodo = { tipo: _selectedMetodo, valore };
+
+  // Aggiorna saldo e storico
+  walletData.saldo -= importo;
+  walletData.movimenti.unshift({
+    id: 'm'+Date.now(), tipo:'prelievo',
+    desc: `Prelievo su ${_selectedMetodo==='iban'?'IBAN •••• '+valore.slice(-4):'PayPal '+valore}`,
+    importo: -importo,
+    data: new Date().toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'}),
+    stato:'completato'
+  });
+
+  closePrelievoModal();
+  buildWalletView();
+  showToast(`✅ Prelievo di €${importo.toFixed(2)} richiesto — arrivo in 1-3 giorni lavorativi`);
+}
+
+// ── RICARICA ──
+const ricaricaMetodi = [
+  { id:'carta',   icon:'💳', label:'Carta di credito / debito',  sub:'Visa, Mastercard, Amex — istantaneo' },
+  { id:'paypal',  icon:'💙', label:'PayPal',                      sub:'Accesso con account PayPal — istantaneo' },
+  { id:'bonifico',icon:'🏦', label:'Bonifico bancario',           sub:'SEPA — 1-2 giorni lavorativi' },
+  { id:'apple',   icon:'🍎', label:'Apple Pay',                   sub:'Touch/Face ID — istantaneo' },
+  { id:'google',  icon:'🟢', label:'Google Pay',                  sub:'Wallet Google — istantaneo' },
+];
+let _ricaricaMetodo = null;
+
+function openRicaricaModal() {
+  _ricaricaMetodo = null;
+  buildRicaricaView();
+  document.getElementById('ricaricaModal').classList.add('open');
+}
+function closeRicaricaModal() { document.getElementById('ricaricaModal').classList.remove('open'); }
+
+function buildRicaricaView() {
+  document.getElementById('ricarica-body').innerHTML = `
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px;margin-bottom:2px;">Ricarica Wallet</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:18px;">
+      Saldo attuale: <strong style="color:var(--accent);">€${walletData.saldo.toFixed(2)}</strong>
+    </div>
+
+    <!-- IMPORTO -->
+    <div class="field-wrap" style="margin-bottom:6px;">
+      <div class="field-label">Importo (€)</div>
+      <div class="price-wrap">
+        <span class="price-symbol">€</span>
+        <input class="field-input" type="number" id="ricarica-importo" placeholder="0.00" min="5" step="0.01" style="padding-left:28px;"/>
+      </div>
+    </div>
+    <!-- Importi rapidi -->
+    <div style="display:flex;gap:6px;margin-bottom:18px;">
+      ${[20,50,100,200].map(v=>`
+        <button onclick="document.getElementById('ricarica-importo').value=${v}"
+          style="flex:1;padding:8px 4px;background:var(--surface2);border:1px solid var(--border);
+          border-radius:10px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;">
+          €${v}
+        </button>`).join('')}
+    </div>
+
+    <!-- METODI PAGAMENTO -->
+    <div style="font-size:10px;font-weight:600;color:var(--muted);letter-spacing:0.7px;margin-bottom:10px;">METODO DI PAGAMENTO</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">
+      ${ricaricaMetodi.map(m=>`
+        <div id="rm-${m.id}" onclick="selectRicaricaMetodo('${m.id}')"
+          style="background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;
+          padding:11px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:border-color 0.2s;">
+          <span style="font-size:22px;">${m.icon}</span>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;">${m.label}</div>
+            <div style="font-size:11px;color:var(--muted);">${m.sub}</div>
+          </div>
+          <div id="rm-dot-${m.id}" style="width:18px;height:18px;border-radius:50%;border:2px solid var(--border);
+            display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--bg);flex-shrink:0;"></div>
+        </div>`).join('')}
+    </div>
+
+    <div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15);border-radius:10px;
+      padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:16px;">
+      🔒 Pagamenti gestiti da <strong style="color:var(--text);">Stripe</strong> — i tuoi dati non vengono mai salvati su AiutiAmoci.
+    </div>
+
+    <button onclick="doRicarica()"
+      style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),#22c55e);color:var(--bg);
+      border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:8px;">
+      ↓ Ricarica wallet
+    </button>
+    <button class="btn-ghost" onclick="closeRicaricaModal()">Annulla</button>
+  `;
+}
+
+function selectRicaricaMetodo(id) {
+  _ricaricaMetodo = id;
+  ricaricaMetodi.forEach(m => {
+    const dot  = document.getElementById('rm-dot-'+m.id);
+    if(!dot) return;
+    const active = m.id === id;
+    dot.style.borderColor  = active ? 'var(--green)' : 'var(--border)';
+    dot.style.background   = active ? 'var(--green)' : 'transparent';
+    dot.textContent        = active ? '✓' : '';
+  });
+}
+
+function doRicarica() {
+  const importo = parseFloat(document.getElementById('ricarica-importo')?.value);
+  if(!_ricaricaMetodo) { showToast('⚠️ Seleziona un metodo di pagamento'); return; }
+  if(!importo || importo < 5) { showToast('⚠️ Importo minimo €5'); return; }
+
+  const metodo = ricaricaMetodi.find(m=>m.id===_ricaricaMetodo);
+
+  // Aggiorna saldo e storico
+  walletData.saldo += importo;
+  walletData.movimenti.unshift({
+    id: 'r'+Date.now(), tipo:'ricarica',
+    desc: `Ricarica via ${metodo.label}`,
+    importo: +importo,
+    data: new Date().toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'}),
+    stato:'completato'
+  });
+
+  closeRicaricaModal();
+  buildWalletView();
+  showToast(`✅ €${importo.toFixed(2)} aggiunti al wallet!`);
+}
+
+function selectCat(el, cat) {
+  document.querySelectorAll('.cat-option').forEach(o=>o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedCat = cat;
+  buildTagsUI(cat);
+
+  const note = document.getElementById('cat-note');
+  if(!note) return;
+  const notes = {
+    pulizie: {
+      bg:'rgba(251,191,36,0.07)', border:'rgba(251,191,36,0.2)', color:'#fbbf24',
+      text:'🧹 <strong>Solo interventi singoli</strong> — pulizia straordinaria, riordino post-trasloco, babysitting per una serata. AiutiAmoci non gestisce contratti continuativi o rapporti di lavoro ricorrenti.'
+    },
+    accompagnamento: {
+      bg:'rgba(167,139,250,0.07)', border:'rgba(167,139,250,0.2)', color:'#a78bfa',
+      text:'🚗 <strong>Passaggi e commissioni</strong> — accompagnamenti a visite, ritiro spesa, pratiche burocratiche. Il guidatore deve essere in possesso di patente valida.'
+    },
+    informatica: {
+      bg:'rgba(52,211,153,0.07)', border:'rgba(52,211,153,0.2)', color:'#34d399',
+      text:'💻 <strong>Supporto tecnico</strong> — configurazione PC, smartphone, router, stampanti. Non include sviluppo software o interventi professionali su impianti.'
+    },
+  };
+  const n = notes[cat];
+  if(n) {
+    note.style.display    = 'block';
+    note.style.background = n.bg;
+    note.style.border     = `1px solid ${n.border}`;
+    note.style.color      = '#aaa';
+    note.innerHTML        = `<span style="color:${n.color};">${n.text}</span>`;
+  } else {
+    note.style.display = 'none';
+  }
+}
+function submitRequest(){
+  const tagSummary = getTagsSummary();
+  const price    = document.getElementById('req-price').value;
+  const dateFrom = document.getElementById('req-date-from').value;
+  const dateTo   = document.getElementById('req-date-to').value;
+
+  if(!tagSummary){ showToast('⚠️ Seleziona almeno un dettaglio'); return; }
+  if(!price){ showToast('⚠️ Indica il compenso'); return; }
+  if(!dateFrom||!dateTo){ showToast('⚠️ Indica la finestra di disponibilità'); return; }
+  if(dateTo < dateFrom){ showToast('⚠️ La data finale deve essere dopo quella iniziale'); return; }
+
+  const timePrefs = [...document.querySelectorAll('#time-prefs .time-chip.active')]
+    .map(el => el.getAttribute('onclick').match(/'([^']+)'\)/)?.[1]).filter(Boolean);
+  if(!timePrefs.length){ showToast('⚠️ Seleziona almeno un orario preferito'); return; }
+
+  // Titolo auto-generato da categoria + primo tag selezionato
+  const groups  = catTags[selectedCat] || catTags['altro'];
+  const firstGroup = selectedTags[0] ? [...selectedTags[0]] : [];
+  const autoTitle = catEmoji[selectedCat] + ' ' +
+    (firstGroup[0] || groups[0]?.chips[0] || 'Aiuto richiesto');
+
+  const notes = document.getElementById('req-notes')?.value?.trim() || '';
+
+  closeNewModal();
+  showToast('✅ Richiesta pubblicata! Fondi congelati.');
+  requests.push({
+    id: requests.length+1,
+    title: autoTitle,
+    desc: tagSummary + (notes ? ' — ' + notes : ''),
+    price: parseInt(price),
+    date: dateFrom, availFrom: dateFrom, availTo: dateTo, timePrefs,
+    address:       document.getElementById('req-address')?.value  || 'Via Roma 14, Milano',
+    interno:       document.getElementById('req-interno')?.value  || 'Terzo piano, int. 3',
+    contactMethod: selectedContact || 'citofono',
+    contactValue:  document.getElementById('req-citofono')?.value || '',
+    cat: selectedCat, mx: 0.3+Math.random()*0.4, my: 0.3+Math.random()*0.4,
+    user: currentUser?.name || 'Tu'
+  });
+  renderSheet(currentFilter);
+  updateOverlay(currentFilter);
+}
+
+// ── AUTH STATE ──
+let currentUser = null; // null = ospite
+let pendingAction = null; // callback da eseguire dopo login
+
+function isLoggedIn(){ return currentUser !== null; }
+
+function updateAuthUI() {
+  const navProfile = document.getElementById('nav-profile');
+  if(!navProfile) return;
+  if (isLoggedIn()) {
+    const initials = currentUser.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    navProfile.innerHTML = `
+      <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+        display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:11px;color:var(--bg);">
+        ${initials}
+      </div>
+      <span style="font-size:9px;color:var(--accent);font-weight:600;">Profilo</span>`;
+  } else {
+    navProfile.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Profilo`;
+  }
+}
+
+function onAvatarClick() {
+  if (isLoggedIn()) openProfileModal();
+  else openAuthModal();
+}
+
+function requireAuth(featureName, callback) {
+  if (isLoggedIn()) { callback(); return; }
+  pendingAction = callback;
+  document.getElementById('auth-gate').style.display = 'block';
+  document.getElementById('gate-title').textContent = 'Accedi per continuare';
+  document.getElementById('gate-sub').textContent = `Per accedere a "${featureName}" devi essere registrato.`;
+  openAuthModal();
+}
+
+function onNewRequest() {
+  requireAuth('Nuova Richiesta', openNewRequest);
+}
+
+// ── AUTH MODAL ──
+function openAuthModal() {
+  switchTab('login');
+  document.getElementById('authModal').classList.add('open');
+}
+function closeAuthModal() {
+  document.getElementById('authModal').classList.remove('open');
+  document.getElementById('auth-gate').style.display = 'none';
+  pendingAction = null;
+}
+
+function switchTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('form-login').style.display    = isLogin ? 'block' : 'none';
+  document.getElementById('form-register').style.display = isLogin ? 'none'  : 'block';
+  const tl = document.getElementById('tab-login');
+  const tr = document.getElementById('tab-register');
+  tl.style.background = isLogin ? 'var(--accent)' : 'transparent';
+  tl.style.color      = isLogin ? 'var(--bg)'     : 'var(--muted)';
+  tr.style.background = isLogin ? 'transparent'   : 'var(--accent)';
+  tr.style.color      = isLogin ? 'var(--muted)'  : 'var(--bg)';
+}
+
+function socialLogin(provider) {
+  // In produzione: OAuth reale con Supabase / Firebase
+  const names = {Google:'Utente Google', Apple:'Utente Apple', Facebook:'Utente Facebook'};
+  currentUser = { name: names[provider], email: provider.toLowerCase()+'@demo.com', method: provider };
+  closeAuthModal();
+  updateAuthUI();
+  showToast(`✅ Accesso con ${provider} effettuato!`);
+  if (pendingAction) { const a = pendingAction; pendingAction=null; a(); }
+}
+
+function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw    = document.getElementById('login-pw').value;
+  if (!email || !pw) { showToast('⚠️ Compila email e password'); return; }
+  if (!email.includes('@')) { showToast('⚠️ Email non valida'); return; }
+  // Simulazione: in produzione → chiamata Supabase auth
+  const name = email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  currentUser = { name, email, method: 'Email' };
+  closeAuthModal();
+  updateAuthUI();
+  showToast('✅ Accesso effettuato. Bentornato!');
+  if (pendingAction) { const a = pendingAction; pendingAction=null; a(); }
+}
+
+function doRegister() {
+  const name    = document.getElementById('reg-name').value.trim();
+  const surname = document.getElementById('reg-surname').value.trim();
+  const email   = document.getElementById('reg-email').value.trim();
+  const pw      = document.getElementById('reg-pw').value;
+  if (!name || !surname) { showToast('⚠️ Inserisci nome e cognome'); return; }
+  if (!email.includes('@')) { showToast('⚠️ Email non valida'); return; }
+  if (pw.length < 8) { showToast('⚠️ Password minimo 8 caratteri'); return; }
+  // Simulazione: in produzione → chiamata Supabase auth
+  currentUser = { name: name+' '+surname, email, method: 'Email' };
+  closeAuthModal();
+  updateAuthUI();
+  showToast('🎉 Account creato! Benvenuto su AiutiAmoci!');
+  if (pendingAction) { const a = pendingAction; pendingAction=null; a(); }
+}
+
+function doLogout() {
+  currentUser = null;
+  updateAuthUI();
+  closeProfileModal();
+  showToast('👋 Uscita effettuata');
+}
+
+function togglePw(id) {
+  const el = document.getElementById(id);
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+function checkPwStrength(pw) {
+  let score = 0;
+  if (pw.length >= 8)  score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw) && /[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  const colors = ['','#f87171','#fb923c','#facc15','#4ade80'];
+  const labels = ['','Debole','Discreta','Buona','Ottima 💪'];
+  for(let i=1;i<=4;i++){
+    document.getElementById('ps'+i).style.background = i<=score ? colors[score] : 'var(--border)';
+  }
+  document.getElementById('pw-strength-label').textContent = pw.length ? labels[score]||labels[1] : '';
+  document.getElementById('pw-strength-label').style.color = colors[score]||'var(--muted)';
+}
+
+// ── REPUTATION DATA ──
+// Struttura: { stars_sum, stars_count, jobs_completed, jobs_noshow, jobs_cancelled_late, reviews[] }
+// Affidabilità = jobs_completed / (jobs_completed + jobs_noshow + jobs_cancelled_late)
+const userReputation = {
+  'Utente Google': {
+    stars_sum: 108.1, stars_count: 23,
+    jobs_completed: 23, jobs_noshow: 1, jobs_cancelled_late: 0,
+    reviews: [
+      { from:'Luca R.',    stars:5, text:'Puntuale e professionale, perfetto!', date:'10 Mar 2026' },
+      { from:'Sofia M.',   stars:4, text:'Ottimo lavoro, solo un po\' in ritardo.', date:'5 Mar 2026' },
+      { from:'Marco T.',   stars:5, text:'Super disponibile, lo richiedo!', date:'28 Feb 2026' },
+      { from:'Anna P.',    stars:5, text:'Preciso e veloce, ottimo!', date:'20 Feb 2026' },
+      { from:'Giulia F.',  stars:4, text:'Buon lavoro nel complesso.', date:'14 Feb 2026' },
+    ]
+  },
+  'Utente Apple': {
+    stars_sum: 27.3, stars_count: 7,
+    jobs_completed: 7, jobs_noshow: 3, jobs_cancelled_late: 2,
+    reviews: [
+      { from:'Anna P.',  stars:3, text:'Lavoro svolto ma poco preciso.', date:'8 Mar 2026' },
+      { from:'Marco T.', stars:2, text:'In ritardo di un\'ora senza avvisare.', date:'1 Mar 2026' },
+      { from:'Luca R.',  stars:5, text:'Questa volta ottimo!', date:'20 Feb 2026' },
+    ]
+  },
+  'default': { stars_sum:0, stars_count:0, jobs_completed:0, jobs_noshow:0, jobs_cancelled_late:0, reviews:[] },
+};
+
+function getRep(name) { return userReputation[name] || userReputation['default']; }
+
+function calcReliability(rep) {
+  const total = rep.jobs_completed + rep.jobs_noshow + rep.jobs_cancelled_late;
+  if(total === 0) return null;
+  return Math.round((rep.jobs_completed / total) * 100);
+}
+
+function calcStars(rep) {
+  if(rep.stars_count === 0) return null;
+  return (rep.stars_sum / rep.stars_count);
+}
+
+function reliabilityColor(pct) {
+  if(pct === null) return 'var(--muted)';
+  if(pct >= 90) return 'var(--green)';
+  if(pct >= 75) return 'var(--accent)';
+  return '#f87171';
+}
+
+function reliabilityLabel(pct) {
+  if(pct === null) return 'Nuovo utente';
+  if(pct >= 95) return 'Molto affidabile';
+  if(pct >= 85) return 'Affidabile';
+  if(pct >= 70) return 'Nella norma';
+  return 'Poco affidabile';
+}
+
+function starsHtml(n, size=16, interactive=false) {
+  if(n === null) return `<span style="font-size:11px;color:var(--muted);">Nessuna valutazione</span>`;
+  const full = Math.floor(n), frac = n % 1;
+  let h = '';
+  for(let i=1;i<=5;i++) {
+    let fill = 'var(--border)';
+    if(i <= full) fill = 'var(--accent)';
+    else if(i === full+1 && frac >= 0.5) fill = 'var(--accent)';
+    h += `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${fill}" stroke="${fill}" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+  }
+  return h;
+}
+
+// Badge composito stelle + affidabilità — usato nel dettaglio richiesta e nel profilo
+function reputationBadge(name, compact=false) {
+  const rep = getRep(name);
+  const stars = calcStars(rep);
+  const rel = calcReliability(rep);
+  const total = rep.jobs_completed + rep.jobs_noshow + rep.jobs_cancelled_late;
+  const rCol = reliabilityColor(rel);
+
+  if(compact) {
+    const starsVal = stars !== null ? stars.toFixed(1) : '—';
+    // Testo affidabilità leggibile: "23 attività · 96% presenza"
+    const actLabel = total === 0
+      ? 'Nuovo utente'
+      : `${total} attivit${total===1?'à':'à'} · ${rel !== null ? rel+'% presenza' : '—'}`;
+    const rCol = reliabilityColor(rel);
+    return `
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          ${starsHtml(stars||0,13)}
+          <span style="font-size:12px;font-weight:700;color:var(--accent);margin-left:1px;">${starsVal}</span>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:${rCol};">${actLabel}</div>
+      </div>`;
+  }
+
+  // Full — usato nel profilo
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div style="background:var(--surface2);border-radius:12px;padding:12px;text-align:center;">
+        <div style="display:flex;justify-content:center;gap:1px;margin-bottom:5px;">${starsHtml(stars||0,13)}</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:20px;">${stars!==null?stars.toFixed(1):'—'}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:1px;">Media stelle<br><span style="color:var(--muted);">(${rep.stars_count} recensioni)</span></div>
+      </div>
+      <div style="background:var(--surface2);border-radius:12px;padding:12px;text-align:center;">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:20px;color:${rCol};margin-bottom:2px;">${rel!==null?rel+'%':'—'}</div>
+        <div style="font-size:10px;color:var(--muted);">Affidabilità<br><span style="color:${rCol};font-weight:600;">${reliabilityLabel(rel)}</span></div>
+      </div>
+      <div style="background:var(--surface2);border-radius:12px;padding:12px;text-align:center;">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:20px;margin-bottom:2px;">${rep.jobs_completed}</div>
+        <div style="font-size:10px;color:var(--muted);">Completate<br>
+          ${rep.jobs_noshow>0?`<span style="color:#f87171;">${rep.jobs_noshow} no-show</span>`:'<span style="color:var(--green);">0 no-show</span>'}
+        </div>
+      </div>
+    </div>
+    ${rep.jobs_cancelled_late > 0 ? `
+    <div style="background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.18);border-radius:10px;padding:10px;font-size:11px;color:#f87171;margin-bottom:12px;line-height:1.5;">
+      ⚠️ ${rep.jobs_cancelled_late} cancellazion${rep.jobs_cancelled_late>1?'i tardive':'e tardiva'} e ${rep.jobs_noshow} no-show registrat${rep.jobs_noshow>1?'i':'o'} — incidono sull'affidabilità visibile a tutti gli utenti.
+    </div>` : ''}`;
+}
+
+// ── COMPLETED JOB TRACKER ──
+let _completedJobForFeedback = null;
+
+// ── FEEDBACK MODAL ──
+// Chiamato SOLO dopo pagamento avvenuto — target: { jobId, jobTitle, otherName, price, net, commission }
+function openFeedbackModal(target) {
+  _feedbackTarget = { ...target, role:'inserzionista' };
+  _selectedStars = 0;
+  buildFeedbackView();
+  document.getElementById('feedbackModal').classList.add('open');
+}
+function closeFeedbackModal() { document.getElementById('feedbackModal').classList.remove('open'); }
+let _feedbackTarget = null;
+let _selectedStars = 0;
+
+function buildFeedbackView() {
+  const t = _feedbackTarget;
+  const rep = getRep(t.otherName || t.name);
+  const rel = calcReliability(rep);
+  const rCol = reliabilityColor(rel);
+  document.getElementById('feedback-body').innerHTML = `
+    <div style="margin-bottom:18px;">
+      <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:0.8px;margin-bottom:6px;">✅ LAVORO COMPLETATO</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:4px;">Valuta ${t.otherName||t.name}</div>
+      <div style="font-size:12px;color:var(--muted);">${t.jobTitle} · €${t.price}</div>
+    </div>
+
+    <!-- THEIR CURRENT REP (preview) -->
+    <div style="background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:18px;display:flex;align-items:center;gap:12px;">
+      <div style="width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--bg);flex-shrink:0;">
+        ${(t.otherName||t.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:3px;">${t.otherName||t.name}</div>
+        ${reputationBadge(t.otherName||t.name, true)}
+      </div>
+    </div>
+
+    <!-- STAR PICKER -->
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Come valuti la collaborazione?</div>
+      <div style="display:flex;justify-content:center;gap:10px;" id="star-row">
+        ${[1,2,3,4,5].map(n=>`
+          <div onclick="selectStar(${n})" id="fstar-${n}"
+            style="font-size:38px;cursor:pointer;transition:transform 0.15s,filter 0.15s;filter:grayscale(1);opacity:0.35;"
+            onmouseover="hoverStar(${n})" onmouseout="resetStarHover()">⭐</div>
+        `).join('')}
+      </div>
+      <div id="star-label" style="font-size:14px;font-weight:600;color:var(--muted);margin-top:12px;min-height:20px;transition:all 0.2s;"></div>
+    </div>
+
+    <div class="field-wrap" style="margin-bottom:16px;">
+      <div class="field-label">Commento (opzionale)</div>
+      <textarea class="field-input" placeholder="Es. Puntuale, professionale, lavoro ben fatto…" id="feedback-text" style="min-height:65px;"></textarea>
+    </div>
+
+    <button onclick="submitFeedback()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg);border:none;border-radius:13px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:8px;">
+      Invia valutazione ⭐
+    </button>
+    <button onclick="closeFeedbackModal();showToast('💳 Vai al Wallet per prelevare')" class="btn-ghost">Salta per ora</button>
+  `;
+}
+
+const starLabels = {1:'😕 Molto scarso',2:'😐 Insufficiente',3:'🙂 Nella norma',4:'😊 Ottimo',5:'🤩 Eccellente!'};
+
+function hoverStar(n) {
+  if(_selectedStars > 0) return;
+  for(let i=1;i<=5;i++){
+    const el=document.getElementById('fstar-'+i);
+    if(el){ el.style.filter=i<=n?'grayscale(0)':'grayscale(1)'; el.style.opacity=i<=n?'1':'0.35'; }
+  }
+  const lbl=document.getElementById('star-label');
+  if(lbl){ lbl.textContent=starLabels[n]||''; lbl.style.color='var(--muted)'; }
+}
+function resetStarHover() {
+  if(_selectedStars > 0) return;
+  for(let i=1;i<=5;i++){
+    const el=document.getElementById('fstar-'+i);
+    if(el){ el.style.filter='grayscale(1)'; el.style.opacity='0.35'; }
+  }
+  const lbl=document.getElementById('star-label'); if(lbl) lbl.textContent='';
+}
+function selectStar(n) {
+  _selectedStars = n;
+  for(let i=1;i<=5;i++){
+    const el=document.getElementById('fstar-'+i); if(!el) continue;
+    el.style.filter   = i<=n ? 'grayscale(0)' : 'grayscale(1)';
+    el.style.opacity  = i<=n ? '1' : '0.35';
+    el.style.transform= i===n ? 'scale(1.3)' : 'scale(1)';
+  }
+  const lbl=document.getElementById('star-label');
+  if(lbl){ lbl.textContent=starLabels[n]||''; lbl.style.color='var(--accent)'; }
+}
+
+function submitFeedback() {
+  if(!_selectedStars){ showToast('⭐ Seleziona almeno 1 stella'); return; }
+  const text = document.getElementById('feedback-text')?.value?.trim()||'';
+  const name = _feedbackTarget?.otherName || _feedbackTarget?.name;
+
+  // Update reputation data in memory
+  if(name && userReputation[name]) {
+    userReputation[name].stars_sum   += _selectedStars;
+    userReputation[name].stars_count += 1;
+    userReputation[name].reviews.unshift({
+      from: currentUser?.name||'Tu',
+      stars: _selectedStars,
+      text: text || starLabels[_selectedStars],
+      date: new Date().toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'})
+    });
+    userReputation[name].jobs_completed += 1;
+  }
+
+  closeFeedbackModal();
+  showToast(`✅ Valutazione inviata — ${_selectedStars} ⭐`);
+}
+
+// ── CANCELLATION MODAL ──
+// role: 'inserzionista' | 'aiutante'
+function openCancelModal(role) {
+  buildCancelView(role);
+  document.getElementById('cancelModal').classList.add('open');
+}
+function closeCancelModal() { document.getElementById('cancelModal').classList.remove('open'); }
+
+function buildCancelView(role) {
+  if(!activeAppt){ closeCancelModal(); return; }
+  const { date, time, title, price } = activeAppt;
+  const net = Math.round(price * 0.9);
+  const commission = price - net;
+
+  // Calculate hours to start (demo: use a fixed distance for simulation)
+  const jobDate = new Date(date+'T'+( (time||'09:00').replace(/[^0-9:]/g,'').slice(0,5) || '09:00'));
+  const now = new Date();
+  const hoursToStart = Math.max(0, Math.round((jobDate - now) / 3600000));
+  const withinDeadline_ins  = hoursToStart <= 24;  // inserzionista: entro 24h
+  const withinDeadline_help = hoursToStart <= 48;  // aiutante: entro 48h
+
+  const body = document.getElementById('cancel-body');
+
+  if(role === 'inserzionista') {
+    body.innerHTML = `
+      <div style="margin-bottom:18px;">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:4px;">Annulla richiesta</div>
+        <div style="font-size:13px;color:var(--muted);">${title} · ${fmtDate(date)}</div>
+      </div>
+
+      ${withinDeadline_ins ? `
+      <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:13px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;color:#f87171;margin-bottom:8px;">⚠️ CANCELLAZIONE TARDIVA — Penale attiva</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.7;">
+          Stai annullando entro 24h dall'inizio del lavoro.<br>
+          <strong style="color:var(--text);">Penale:</strong> la commissione AiutiAmoci (€${commission}) <strong style="color:#f87171;">non viene rimborsata</strong>.<br>
+          L'aiutante riceve una <strong style="color:var(--accent);">comunicazione</strong> e nessuna penale.
+        </div>
+      </div>
+      <div style="background:var(--surface2);border-radius:13px;padding:14px;margin-bottom:16px;">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:10px;">💸 RIEPILOGO RIMBORSO</div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--muted);font-size:13px;">Compenso versato</span><span>€${price}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="color:var(--muted);font-size:13px;">Commissione trattenuta (penale)</span><span style="color:#f87171;">−€${commission}</span></div>
+        <div style="height:1px;background:var(--border);margin:8px 0;"></div>
+        <div style="display:flex;justify-content:space-between;font-weight:700;"><span>Ti viene rimborsato</span><span style="color:var(--accent);">€${net}</span></div>
+      </div>` : `
+      <div style="background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.2);border-radius:13px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px;">✓ Cancellazione gratuita</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;">Stai annullando con più di 24h di anticipo.<br>Rimborso completo di <strong style="color:var(--accent);">€${price}</strong>.</div>
+      </div>`}
+
+      <button onclick="confirmCancel('inserzionista')" style="width:100%;padding:14px;background:rgba(248,113,113,0.12);border:1.5px solid rgba(248,113,113,0.3);border-radius:13px;color:#f87171;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px;">
+        Conferma annullamento
+      </button>
+      <button class="btn-ghost" onclick="closeCancelModal()">Torna indietro</button>
+    `;
+  }
+
+  else if(role === 'aiutante') {
+    body.innerHTML = `
+      <div style="margin-bottom:18px;">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:4px;">Rinuncia all'incarico</div>
+        <div style="font-size:13px;color:var(--muted);">${title} · ${fmtDate(date)}</div>
+      </div>
+
+      ${withinDeadline_help ? `
+      <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:13px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;color:#f87171;margin-bottom:8px;">⚠️ RINUNCIA TARDIVA — Penale attiva</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.7;">
+          Stai rinunciando entro 48h dall'inizio del lavoro.<br>
+          <strong style="color:var(--text);">Penale 1:</strong> <strong style="color:#f87171;">feedback negativo automatico</strong> sul tuo profilo.<br>
+          <strong style="color:var(--text);">Penale 2:</strong> il tuo <strong style="color:#f87171;">tasso di presenza scende</strong> e sarà visibile a tutti.
+        </div>
+      </div>
+      <div style="background:var(--surface2);border-radius:13px;padding:12px;margin-bottom:14px;">
+        <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:8px;">📉 IMPATTO SUL TUO PROFILO</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+          <div style="font-size:20px;">⭐</div>
+          <div style="font-size:12px;color:var(--muted);">Feedback negativo automatico aggiunto (1 stella)</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="font-size:20px;">📉</div>
+          <div style="font-size:12px;color:var(--muted);">Tasso di presenza −${Math.round(100/(getReputation(currentUser?.name||'').jobs+1))}%</div>
+        </div>
+      </div>` : `
+      <div style="background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.2);border-radius:13px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px;">✓ Rinuncia senza penale</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;">Stai rinunciando con più di 48h di anticipo.<br>Nessun impatto sulla tua reputazione.</div>
+      </div>`}
+
+      <div style="background:rgba(245,200,66,0.06);border:1px solid rgba(245,200,66,0.15);border-radius:11px;padding:10px;font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:14px;">
+        💡 L'inserzionista riceverà notifica e i fondi restano bloccati finché non trova un nuovo aiutante.
+      </div>
+
+      <button onclick="confirmCancel('aiutante')" style="width:100%;padding:14px;background:rgba(248,113,113,0.12);border:1.5px solid rgba(248,113,113,0.3);border-radius:13px;color:#f87171;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px;">
+        Conferma rinuncia
+      </button>
+      <button class="btn-ghost" onclick="closeCancelModal()">Torna indietro</button>
+    `;
+  }
+}
+
+function confirmCancel(role) {
+  closeCancelModal();
+  closeApptModal();
+  if(role === 'aiutante') {
+    showToast('❌ Incarico rinunciato — reputazione aggiornata');
+  } else {
+    showToast('❌ Richiesta annullata — rimborso in corso');
+  }
+  activeAppt = null;
+}
+
+// ── PROFILE MODAL ──
+function openProfileModal() {
+  if (!currentUser) return;
+  buildProfileView();
+  document.getElementById('profileModal').classList.add('open');
+}
+function closeProfileModal() { document.getElementById('profileModal').classList.remove('open'); }
+
+function buildProfileView() {
+  const u   = currentUser;
+  const rep = getRep(u.name);
+  const initials = u.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  const stars = calcStars(rep);
+  const rel   = calcReliability(rep);
+  const rCol  = reliabilityColor(rel);
+
+  document.getElementById('profile-body').innerHTML = `
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+      <div style="width:58px;height:58px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--bg);flex-shrink:0;">${initials}</div>
+      <div style="flex:1">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:17px;">${u.name}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:1px;">${u.email}</div>
+        <div style="font-size:11px;color:var(--green);margin-top:2px;font-weight:600;">✓ ${u.method}</div>
+      </div>
+    </div>
+
+    ${reputationBadge(u.name, false)}
+
+    ${rep.reviews.length > 0 ? `
+    <div style="margin-bottom:16px;">
+      <div style="font-size:10px;font-weight:600;color:var(--muted);letter-spacing:0.8px;margin-bottom:10px;">RECENSIONI RICEVUTE</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${rep.reviews.slice(0,5).map(rv=>`
+        <div style="background:var(--surface2);border-radius:12px;padding:12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+            <div style="font-size:12px;font-weight:600;">${rv.from}</div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div style="display:flex;gap:1px;">${starsHtml(rv.stars,12)}</div>
+              <span style="font-size:11px;font-weight:600;color:var(--accent);">${rv.stars}.0</span>
+            </div>
+          </div>
+          ${rv.text ? `<div style="font-size:12px;color:var(--muted);line-height:1.5;">"${rv.text}"</div>` : ''}
+          <div style="font-size:10px;color:var(--border);margin-top:4px;">${rv.date||''}</div>
+        </div>`).join('')}
+      </div>
+    </div>` : `
+    <div style="background:var(--surface2);border-radius:12px;padding:16px;text-align:center;margin-bottom:16px;">
+      <div style="font-size:26px;margin-bottom:6px;">⭐</div>
+      <div style="font-size:13px;color:var(--muted);">Nessuna recensione ancora.<br>Completa il tuo primo lavoro!</div>
+    </div>`}
+
+    <div style="background:var(--surface2);border-radius:14px;overflow:hidden;margin-bottom:14px;">
+      <div onclick="closeProfileModal();requireAuth('Incarichi',openIncarichiModal)" style="padding:13px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;border-bottom:1px solid var(--border);">
+        <span style="font-size:18px;">📋</span><span style="font-size:14px;">Le mie richieste</span><span style="margin-left:auto;color:var(--muted);">›</span>
+      </div>
+      <div onclick="closeProfileModal();requireAuth('Incarichi',openIncarichiModal)" style="padding:13px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;border-bottom:1px solid var(--border);">
+        <span style="font-size:18px;">✅</span><span style="font-size:14px;">I miei incarichi</span><span style="margin-left:auto;color:var(--muted);">›</span>
+      </div>
+      <div onclick="closeProfileModal();requireAuth('Il tuo wallet',openWalletModal)" style="padding:13px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;border-bottom:1px solid var(--border);">
+        <span style="font-size:18px;">💳</span><span style="font-size:14px;">Wallet & Pagamenti</span><span style="margin-left:auto;color:var(--muted);">›</span>
+      </div>
+      <div onclick="showToast('⚙️ Impostazioni')" style="padding:13px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;">
+        <span style="font-size:18px;">⚙️</span><span style="font-size:14px;">Impostazioni</span><span style="margin-left:auto;color:var(--muted);">›</span>
+      </div>
+    </div>
+    <button onclick="doLogout()" style="width:100%;padding:13px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);border-radius:13px;color:#f87171;font-family:'Syne',sans-serif;font-weight:600;font-size:14px;cursor:pointer;margin-bottom:8px;">Esci dall'account</button>
+    <button class="btn-ghost" onclick="closeProfileModal()">Chiudi</button>
+  `;
+}
+
+// ── AUTH STATE ──
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2600);
+}
+
+// ── INIT ──
+// ── TAG SYSTEM ──
+const catTags = {
+  trasloco: [
+    { group:'Dimensione', multi:false, chips:['Pochi scatoloni','Stanza singola','Appartamento intero','Ufficio/negozio'] },
+    { group:'Piano (partenza)', multi:false, chips:['Piano terra','1° – 2°','3° o superiore','Con ascensore'] },
+    { group:'Caratteristiche', multi:true,  chips:['Oggetti fragili','Smontaggio mobili','Solo facchinaggio','Serve furgone'] },
+  ],
+  montaggio: [
+    { group:'Tipo di lavoro', multi:false, chips:['Mobili IKEA','Cucina componibile','Armadio','Scaffalature','Altro mobile'] },
+    { group:'Quantità pezzi', multi:false, chips:['1–3 elementi','4–8 elementi','9+ elementi'] },
+    { group:'Extra', multi:true, chips:['Ho gli attrezzi','Servono attrezzi','Fissaggio a parete','Smontaggio precedente'] },
+  ],
+  accompagnamento: [
+    { group:'Tipo', multi:false, chips:['Visita medica','Commissioni/uffici','Spesa/supermercato','Ritiro pacco','Altro spostamento'] },
+    { group:'Durata stimata', multi:false, chips:['< 1 ora','1–2 ore','2–4 ore','Mezza giornata'] },
+    { group:'Extra', multi:true, chips:['Serve aiuto fisico','Persona anziana','Passeggino/carrozzina','Solo andata'] },
+  ],
+  informatica: [
+    { group:'Dispositivo', multi:true, chips:['PC/Laptop','Smartphone','Stampante','Router/WiFi','Tablet','Smart TV'] },
+    { group:'Tipo di problema', multi:false, chips:['Configurazione iniziale','Virus/lentezza','Recupero dati','Installazione programmi','Connessione rete'] },
+    { group:'Sistema operativo', multi:false, chips:['Windows','macOS','Android','iOS','Non so'] },
+  ],
+  casa: [
+    { group:'Tipo di lavoro', multi:true, chips:['Potatura/giardino','Pulizia spazi','Piccole riparazioni','Spostamento mobili pesanti','Verniciatura','Montaggio tende/quadri'] },
+    { group:'Durata stimata', multi:false, chips:['< 2 ore','2–4 ore','Giornata intera'] },
+    { group:'Extra', multi:true, chips:['Attrezzi disponibili','Servono attrezzi','Accesso esterno','Piano alto'] },
+  ],
+  pulizie: [
+    { group:'Tipo intervento', multi:false, chips:['Pulizia ordinaria','Pulizia straordinaria','Post-trasloco','Pre-trasloco','Babysitting serale','Assistenza puntuale anziano'] },
+    { group:'Ampiezza spazio', multi:false, chips:['Monolocale','2–3 locali','4+ locali','Ufficio/locale commerciale'] },
+    { group:'Extra', multi:true, chips:['Prodotti forniti','Servono prodotti','Con stiratura','Solo cucina/bagni'] },
+  ],
+  altro: [
+    { group:'Tipo di aiuto', multi:true, chips:['Aiuto fisico','Consegna/ritiro','Assistenza varia','Accompagnamento','Commissione'] },
+    { group:'Durata stimata', multi:false, chips:['< 1 ora','1–2 ore','Mezza giornata','Giornata intera'] },
+  ],
+};
+
+// Selected tags state: { groupIndex: Set of chip values }
+let selectedTags = {};
+
+function buildTagsUI(cat) {
+  selectedTags = {};
+  const groups = catTags[cat] || catTags['altro'];
+  const container = document.getElementById('tags-container');
+  if(!container) return;
+  container.innerHTML = groups.map((g, gi) => {
+    selectedTags[gi] = new Set();
+    const multiHint = g.multi ? ' <span style="color:var(--muted);font-weight:400;">(più scelte)</span>' : '';
+    return `
+      <div class="tag-group">
+        <div class="tag-group-label">${g.group.toUpperCase()}${multiHint}</div>
+        <div class="tag-chips">
+          ${g.chips.map(c => `
+            <div class="tag-chip" onclick="toggleTag(this, ${gi}, '${c}', ${g.multi})">${c}</div>
+          `).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleTag(el, gi, value, multi) {
+  if(!multi) {
+    // single select: deselect siblings
+    el.closest('.tag-chips').querySelectorAll('.tag-chip').forEach(c => c.classList.remove('selected'));
+    selectedTags[gi] = new Set([value]);
+    el.classList.add('selected');
+  } else {
+    if(selectedTags[gi].has(value)) {
+      selectedTags[gi].delete(value);
+      el.classList.remove('selected');
+    } else {
+      selectedTags[gi].add(value);
+      el.classList.add('selected');
+    }
+  }
+}
+
+function getTagsSummary() {
+  // Builds a readable summary from selected tags
+  const groups = catTags[selectedCat] || catTags['altro'];
+  return groups.map((g, gi) => {
+    const vals = [...(selectedTags[gi]||new Set())];
+    return vals.length ? vals.join(', ') : null;
+  }).filter(Boolean).join(' · ');
+}
+
+// ── NOTES FILTER ──
+// Blocks: phone numbers, street addresses, emails, social handles, fiscal codes
+const _blocked = [
+  /\b(\+?39[\s\-]?)?(0\d{1,4}[\s\-]?\d{5,10}|\d{10,11})\b/,   // telefoni IT
+  /\b\d{3}[\s\.\-]?\d{3}[\s\.\-]?\d{4}\b/,                      // formato 3+3+4
+  /\b(via|viale|corso|piazza|vicolo|largo|str\.|v\.le)\b/i,       // indirizzi stradali
+  /\b(civico|n°|int\.|interno|scala|piano)\s*\d/i,               // riferimenti civico
+  /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/,           // email
+  /@[a-zA-Z0-9_]{3,}/,                                            // @social
+  /\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b/,                 // codice fiscale
+  /\bwa\.me\b|\bwhatsapp\b|\btelegram\b|\bsignal\b/i,             // app contatto
+  /\b(chiamami|scrivimi|contattami|trovami)\b/i,                  // inviti contatto
+];
+
+function filterNotes(el) {
+  const warn = document.getElementById('notes-warning');
+  const count = document.getElementById('notes-count');
+  const val = el.value;
+  const blocked = _blocked.some(r => r.test(val));
+  if(blocked) {
+    el.style.borderColor = '#f87171';
+    warn.style.display = 'block';
+    // strip the offending part — find and remove matched segment
+    let cleaned = val;
+    _blocked.forEach(r => { cleaned = cleaned.replace(r, ''); });
+    el.value = cleaned.trim();
+  } else {
+    el.style.borderColor = '';
+    warn.style.display = 'none';
+  }
+  if(count) count.textContent = el.value.length + '/120';
+}
+
+function init(){
+  mc = document.getElementById('map-container');
+
+  // ── MOUSE PAN ──
+  mc.addEventListener('mousedown', e=>{
+    if(e.target.closest('.map-marker')) return;
+    isDragging=true; dragStartX=e.clientX; dragStartY=e.clientY;
+    panStartX=panX; panStartY=panY;
+  });
+  window.addEventListener('mousemove', e=>{
+    if(!isDragging) return;
+    panX = panStartX-(e.clientX-dragStartX);
+    panY = panStartY-(e.clientY-dragStartY);
+    render();
+  });
+  window.addEventListener('mouseup', ()=>{ isDragging=false; });
+
+  // Mouse wheel zoom
+  mc.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.12 : 0.88;
+    const rect = mc.getBoundingClientRect();
+    applyZoom(zoom*factor, e.clientX-rect.left, e.clientY-rect.top);
+  }, {passive:false});
+
+  // ── TOUCH PAN + PINCH ZOOM ──
+  mc.addEventListener('touchstart', e=>{
+    if(e.target.closest('.map-marker')) return;
+    if(e.touches.length===1){
+      isDragging=true;
+      dragStartX=e.touches[0].clientX; dragStartY=e.touches[0].clientY;
+      panStartX=panX; panStartY=panY;
+      lastTouchDist=null;
+    } else if(e.touches.length===2){
+      isDragging=false;
+      lastTouchDist=getTouchDist(e);
+    }
+  },{passive:true});
+  mc.addEventListener('touchmove', e=>{
+    e.preventDefault();
+    if(e.touches.length===1 && isDragging){
+      panX = panStartX-(e.touches[0].clientX-dragStartX);
+      panY = panStartY-(e.touches[0].clientY-dragStartY);
+      render();
+    } else if(e.touches.length===2 && lastTouchDist){
+      const dist=getTouchDist(e);
+      const factor=dist/lastTouchDist;
+      const cx=(e.touches[0].clientX+e.touches[1].clientX)/2;
+      const cy=(e.touches[0].clientY+e.touches[1].clientY)/2;
+      const rect=mc.getBoundingClientRect();
+      applyZoom(zoom*factor, cx-rect.left, cy-rect.top);
+      lastTouchDist=dist;
+    }
+  },{passive:false});
+  mc.addEventListener('touchend', e=>{
+    if(e.touches.length===0){ isDragging=false; lastTouchDist=null; }
+    if(e.touches.length===1){ lastTouchDist=null; }
+  },{passive:true});
+
+  const VW=getVW(), VH=getVH();
+  panX=MAP_W*zoom/2-VW/2;
+  panY=MAP_H*zoom/2-VH/2;
+  render();
+  renderSheet('tutti');
+  updateAuthUI();
+  window.addEventListener('resize', render);
+}
+// ── ONBOARDING ──
+let obStep = 0;
+const OB_TOTAL = 3;
+
+function obUpdateUI() {
+  // Slide transform
+  document.getElementById('ob-slides').style.transform = `translateX(-${obStep * 100}vw)`;
+  // Dots
+  for(let i=0;i<OB_TOTAL;i++){
+    const d = document.getElementById('od'+i);
+    if(d) { d.className = 'ob-dot'+(i===obStep?' active':''); }
+  }
+  // Bottone
+  const btn = document.getElementById('ob-next');
+  if(btn) btn.textContent = obStep === OB_TOTAL-1 ? 'Inizia →' : 'Avanti →';
+}
+
+function obNext() {
+  if(obStep < OB_TOTAL-1) { obStep++; obUpdateUI(); }
+  else { obFinish(); }
+}
+
+function obSkip() { obFinish(); }
+
+function obFinish() {
+  const el = document.getElementById('onboarding');
+  if(!el) return;
+  el.style.transition = 'opacity 0.5s';
+  el.style.opacity = '0';
+  setTimeout(()=>{ el.style.display='none'; }, 500);
+}
+
+window.addEventListener('load', init);
+</script>
+
+<!-- ONBOARDING -->
+<div id="onboarding" style="position:fixed;top:0;left:0;right:0;bottom:72px;z-index:999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding-bottom:24px;overflow:hidden;">
+  <div style="flex:1;width:100%;overflow:hidden;position:relative;">
+    <div id="ob-slides" style="display:flex;height:100%;transition:transform 0.42s cubic-bezier(0.32,0.72,0,1);">
+
+      <!-- SLIDE 1 -->
+      <div class="ob-slide">
+        <div class="ob-visual" style="background:radial-gradient(circle at 50% 60%, rgba(245,200,66,0.18) 0%, transparent 70%);">
+          <div style="font-size:88px;line-height:1;">🗺️</div>
+        </div>
+        <div class="ob-tag">Benvenuto su</div>
+        <div class="ob-title" style="color:var(--accent);">AiutiAmoci</div>
+        <div class="ob-body">Il marketplace dell'aiuto concreto.</div>
+      </div>
+
+      <!-- SLIDE 2 -->
+      <div class="ob-slide">
+        <div class="ob-visual" style="background:radial-gradient(circle at 50% 60%, rgba(96,165,250,0.15) 0%, transparent 70%);">
+          <div style="font-size:72px;line-height:1;">🤝✨</div>
+        </div>
+        <div class="ob-title">Come funziona</div>
+        <div class="ob-body">Hai bisogno di aiuto? Pubblica una richiesta.<br>Vuoi guadagnare? Rispondi alle richieste nella tua zona.</div>
+      </div>
+
+      <!-- SLIDE 3 -->
+      <div class="ob-slide">
+        <div class="ob-visual" style="background:radial-gradient(circle at 50% 60%, rgba(74,222,128,0.15) 0%, transparent 70%);">
+          <div style="font-size:88px;line-height:1;">🔒</div>
+        </div>
+        <div class="ob-title">I tuoi soldi<br>al sicuro</div>
+        <div class="ob-body">Per una maggiore sicurezza le transazioni e i compensi sono gestiti interamente dalla piattaforma.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Dots + Bottoni -->
+  <div style="width:100%;max-width:390px;padding:0 24px;display:flex;flex-direction:column;align-items:center;gap:10px;">
+    <div style="display:flex;gap:7px;margin-bottom:8px;">
+      <div class="ob-dot active" id="od0"></div>
+      <div class="ob-dot" id="od1"></div>
+      <div class="ob-dot" id="od2"></div>
+    </div>
+    <button id="ob-next" onclick="obNext()"
+      style="width:100%;padding:15px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+      color:var(--bg);border:none;border-radius:14px;font-family:'Syne',sans-serif;
+      font-weight:800;font-size:16px;cursor:pointer;letter-spacing:0.3px;">
+      Avanti →
+    </button>
+    <button onclick="obSkip()"
+      style="background:none;border:none;color:var(--muted);font-size:13px;
+      cursor:pointer;padding:4px;font-family:'DM Sans',sans-serif;">
+      Salta
+    </button>
+  </div>
+</div>
+
+<div class="nav-bar">
+  <div class="nav-item active" id="nav-mappa">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    Mappa
+  </div>
+
+  <div class="nav-item" onclick="requireAuth('I tuoi incarichi', openIncarichiModal)">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    Incarichi
+  </div>
+
+  <!-- FAB centrale -->
+  <div style="display:flex;align-items:center;justify-content:center;">
+    <div onclick="requireAuth('Nuova Richiesta', openNewRequest)"
+      style="width:50px;height:50px;border-radius:17px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+      display:flex;align-items:center;justify-content:center;cursor:pointer;
+      box-shadow:0 6px 22px rgba(245,200,66,0.35);transform:translateY(-12px);
+      transition:transform 0.15s,box-shadow 0.15s;"
+      onmousedown="this.style.transform='translateY(-10px) scale(0.94)'"
+      onmouseup="this.style.transform='translateY(-12px) scale(1)'"
+      ontouchstart="this.style.transform='translateY(-10px) scale(0.94)'"
+      ontouchend="this.style.transform='translateY(-12px) scale(1)'">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0a0f18" stroke-width="2.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </div>
+  </div>
+
+  <div class="nav-item" onclick="requireAuth('Il tuo wallet', openWalletModal)">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+    Wallet
+  </div>
+
+  <div class="nav-item" id="nav-profile" onclick="onAvatarClick()">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    Profilo
+  </div>
+</div>
+
+
+
+</body>
+</html>
