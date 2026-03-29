@@ -27,14 +27,14 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;backgroun
 /* ── NAVBAR ── sempre visibile, mai coperta ── */
 #navbar{
   flex-shrink:0;
-  height:100px;
+  height:72px;
   background:var(--card);
   border-top:1px solid var(--border);
   display:flex;
   align-items:flex-start;
   justify-content:space-around;
   padding-top:10px;
-  padding-bottom:36px;
+  padding-bottom:8px;
   position:relative;
   z-index:10;
 }
@@ -185,7 +185,7 @@ textarea.finput{min-height:70px;resize:none;}
 .ob-tag{font-size:11px;font-weight:700;letter-spacing:1.2px;color:#b0b0c8;text-transform:uppercase;margin-bottom:8px;}
 .ob-title{font-family:'Syne',sans-serif;font-weight:800;font-size:34px;line-height:1.1;margin-bottom:14px;}
 .ob-body{font-size:15px;color:#b0b0c8;line-height:1.65;max-width:300px;}
-#ob-bottom{padding:16px 24px 52px;display:flex;flex-direction:column;align-items:center;gap:10px;flex-shrink:0;}
+#ob-bottom{padding:16px 24px 28px;display:flex;flex-direction:column;align-items:center;gap:10px;flex-shrink:0;}
 .ob-dots{display:flex;gap:7px;}
 .ob-dot{width:7px;height:7px;border-radius:4px;background:var(--border);transition:width 0.3s,background 0.3s;}
 .ob-dot.active{width:22px;background:var(--accent);}
@@ -2251,6 +2251,20 @@ window.addEventListener('load',()=>{
   renderSheet();
   initMapEvents();
   window.addEventListener('resize',render);
+
+  // Rileva se siamo dentro la WebView dell'app (non browser normale)
+  const isWebView = !window.chrome && navigator.userAgent.includes('Android') && !navigator.userAgent.includes('Chrome/');
+  if(isWebView){
+    const navbar = document.getElementById('navbar');
+    if(navbar){
+      navbar.style.height = '100px';
+      navbar.style.paddingBottom = '36px';
+    }
+    const obBottom = document.getElementById('ob-bottom');
+    if(obBottom){
+      obBottom.style.paddingBottom = '52px';
+    }
+  }
 });
 </script>
 </body>
