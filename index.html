@@ -219,6 +219,7 @@ textarea.finput{min-height:70px;resize:none;}
 .detail-price{font-family:'Syne',sans-serif;font-weight:800;font-size:30px;color:var(--accent);}
 .rep-badge{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
 </style>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCV-aNfR3sul5hRsj5xqjx_f1Co2XbECKs&callback=initGoogleMap" async defer></script>
 </head>
 <body>
 
@@ -231,7 +232,7 @@ textarea.finput{min-height:70px;resize:none;}
 
   <!-- AREA MAPPA -->
   <div id="map-area">
-    <canvas id="map-canvas"></canvas>
+    <div id="map-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
     <div id="markers-layer"></div>
     <div id="user-dot"></div>
 
@@ -844,87 +845,97 @@ const demoIncarichi={
 // ══════════════════════════════════════════════════════
 //  MAPPA
 // ══════════════════════════════════════════════════════
-const MAP_W=2400,MAP_H=2400;
-let zoom=1,panX=600,panY=600,isDragging=false,dragSX,dragSY,panSX,panSY,lastDist=null;
+// ── GOOGLE MAPS ──
+let gmap = null;
+let userLat = 45.4654, userLng = 9.1859; // Default: Milano
+let gmapMarkers = [];
 
-function getW(){return document.getElementById('map-area').offsetWidth;}
-function getH(){return document.getElementById('map-area').offsetHeight;}
-
-function drawMap(){
-  const canvas=document.getElementById('map-canvas');
-  const W=getW(),H=getH();
-  canvas.width=W;canvas.height=H;
-  const ctx=canvas.getContext('2d');
-  const mw=MAP_W*zoom,mh=MAP_H*zoom;
-  const ox=-panX,oy=-panY;
-  ctx.clearRect(0,0,W,H);
-  // Sfondo strade
-  ctx.fillStyle='#111827';ctx.fillRect(0,0,W,H);
-  // Griglia strade
-  const gSize=160*zoom;
-  ctx.strokeStyle='#1e2a3a';ctx.lineWidth=1.5;
-  for(let x=ox%gSize;x<W;x+=gSize){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
-  for(let y=oy%gSize;y<H;y+=gSize){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-  // Edifici
-  const buildings=[[0.15,0.15,0.12,0.1],[0.32,0.12,0.1,0.08],[0.55,0.08,0.15,0.12],[0.75,0.1,0.12,0.1],[0.08,0.3,0.1,0.12],[0.25,0.28,0.12,0.1],[0.48,0.25,0.1,0.14],[0.68,0.28,0.12,0.1],[0.88,0.22,0.1,0.15],[0.1,0.52,0.14,0.1],[0.28,0.55,0.1,0.12],[0.62,0.5,0.12,0.1],[0.8,0.48,0.1,0.14],[0.15,0.72,0.1,0.1],[0.35,0.7,0.14,0.1],[0.6,0.68,0.1,0.12],[0.78,0.65,0.12,0.1],[0.92,0.6,0.08,0.12],[0.05,0.85,0.12,0.1],[0.3,0.82,0.1,0.1],[0.52,0.88,0.14,0.08],[0.72,0.82,0.1,0.12]];
-  buildings.forEach(([bx,by,bw,bh])=>{
-    const x=bx*mw+ox,y=by*mh+oy;
-    ctx.fillStyle='#1a2335';ctx.fillRect(x,y,bw*mw,bh*mh);
-    ctx.strokeStyle='#243046';ctx.lineWidth=1;ctx.strokeRect(x,y,bw*mw,bh*mh);
+function initGoogleMap(){
+  const mapDiv = document.getElementById('map-canvas');
+  gmap = new google.maps.Map(mapDiv, {
+    center: {lat: userLat, lng: userLng},
+    zoom: 14,
+    disableDefaultUI: true,
+    styles: [
+      {elementType:'geometry',stylers:[{color:'#0d1117'}]},
+      {elementType:'labels.text.fill',stylers:[{color:'#6b6b80'}]},
+      {elementType:'labels.text.stroke',stylers:[{color:'#0d1117'}]},
+      {featureType:'road',elementType:'geometry',stylers:[{color:'#1e2a3a'}]},
+      {featureType:'road',elementType:'geometry.stroke',stylers:[{color:'#243046'}]},
+      {featureType:'road.highway',elementType:'geometry',stylers:[{color:'#243046'}]},
+      {featureType:'water',elementType:'geometry',stylers:[{color:'#0a0f1a'}]},
+      {featureType:'poi.park',elementType:'geometry',stylers:[{color:'rgba(34,84,44,0.4)'}]},
+      {featureType:'poi',elementType:'labels',stylers:[{visibility:'off'}]},
+      {featureType:'transit',stylers:[{visibility:'off'}]},
+    ]
   });
-  // Parchi
-  [[0.65,0.15,0.1,0.1],[0.05,0.45,0.08,0.12],[0.8,0.72,0.1,0.08]].forEach(([bx,by,bw,bh])=>{
-    ctx.fillStyle='rgba(34,84,44,0.4)';ctx.fillRect(bx*mw+ox,by*mh+oy,bw*mw,bh*mh);
-  });
+  // Geolocalizzazione reale
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      userLat = pos.coords.latitude;
+      userLng = pos.coords.longitude;
+      gmap.setCenter({lat:userLat, lng:userLng});
+      renderMarkers();
+    }, ()=>{
+      renderMarkers();
+    });
+  } else {
+    renderMarkers();
+  }
+  // User dot al centro
+  const userDot = document.getElementById('user-dot');
+  if(userDot) userDot.style.display = 'block';
+  renderMarkers();
+  document.getElementById('sheet-title').textContent=`${requests.length} richieste nella zona`;
 }
 
 function fuzz(id,seed){return(Math.sin(id*9301+seed*49297)*0.5+0.5);}
 
 function renderMarkers(){
-  const layer=document.getElementById('markers-layer');
-  const W=getW(),H=getH();
-  const mw=MAP_W*zoom,mh=MAP_H*zoom;
-  layer.innerHTML=requests.map(r=>{
-    const col=catColors[r.cat]||'#f5c842';
-    const diam=Math.max(80,120*zoom);
-    const ox=fuzz(r.id,1)*70*zoom*(fuzz(r.id,3)>0.5?1:-1);
-    const oy=fuzz(r.id,2)*70*zoom*(fuzz(r.id,4)>0.5?1:-1);
-    const cx=r.mx*mw-panX+ox,cy=r.my*mh-panY+oy;
-    const inLav=!!r.inLavorazione;
-    const bgAlpha=inLav?'30':'18';
-    const borderStyle=inLav?'2px solid':'1.5px dashed';
-    const borderAlpha=inLav?'90':'55';
-    const lavBadge=inLav?`<div style="background:rgba(10,15,24,0.82);color:${col};padding:2px 8px;border-radius:20px;font-size:${Math.max(8,9*zoom)}px;font-weight:600;border:1px solid ${col}50;">● in lavorazione</div>`:'';
-    return `<div style="position:absolute;left:${cx}px;top:${cy}px;transform:translate(-50%,-50%);cursor:pointer;pointer-events:all;" onclick="openDetail(${r.id})">
-      <div style="width:${diam}px;height:${diam}px;border-radius:50%;background:radial-gradient(circle,${col}${bgAlpha} 0%,transparent 70%);border:${borderStyle} ${col}${borderAlpha};display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;">
-        <div style="background:rgba(10,15,24,0.88);color:${col};padding:4px 10px;border-radius:20px;font-family:'Syne',sans-serif;font-weight:700;font-size:${Math.max(9,11*zoom)}px;border:1px solid ${col}50;white-space:nowrap;">
-          ${catEmoji[r.cat]} €${fmt(r.price)}
-        </div>
-        ${lavBadge}
-      </div>
-    </div>`;
-  }).join('');
-  // User dot
-  // user-dot fixed at center via CSS — no JS needed
+  if(!gmap) return;
+  // Rimuovi marker vecchi
+  gmapMarkers.forEach(m=>m.setMap(null));
+  gmapMarkers = [];
+  requests.forEach(r=>{
+    const col = catColors[r.cat]||'#f5c842';
+    const inLav = !!r.inLavorazione;
+    // Posizione casuale intorno all'utente
+    const latOff = (fuzz(r.id,1)-0.5)*0.02;
+    const lngOff = (fuzz(r.id,2)-0.5)*0.02;
+    const pos = {lat: userLat+latOff, lng: userLng+lngOff};
+    const label = `${catEmoji[r.cat]} €${fmt(r.price)}`;
+    const markerDiv = document.createElement('div');
+    markerDiv.style.cssText = `background:rgba(10,15,24,0.88);color:${col};padding:5px 11px;border-radius:20px;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;border:${inLav?'2px solid':'1.5px dashed'} ${col};white-space:nowrap;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.5);`;
+    markerDiv.textContent = label;
+    const overlay = new google.maps.OverlayView();
+    overlay.onAdd = function(){
+      this.getPanes().overlayMouseTarget.appendChild(markerDiv);
+      markerDiv.addEventListener('click',()=>openDetail(r.id));
+    };
+    overlay.draw = function(){
+      const proj = this.getProjection();
+      const p = proj.fromLatLngToDivPixel(new google.maps.LatLng(pos.lat, pos.lng));
+      if(p){
+        markerDiv.style.left = (p.x - markerDiv.offsetWidth/2) + 'px';
+        markerDiv.style.top  = (p.y - markerDiv.offsetHeight/2) + 'px';
+        markerDiv.style.position = 'absolute';
+      }
+    };
+    overlay.onRemove = function(){ markerDiv.remove(); };
+    overlay.setMap(gmap);
+    gmapMarkers.push(overlay);
+  });
 }
 
 function render(){
-  clamp();drawMap();renderMarkers();
+  renderMarkers();
   document.getElementById('sheet-title').textContent=`${requests.length} richieste nella zona`;
 }
 
-function clamp(){
-  const W=getW(),H=getH();
-  const mw=MAP_W*zoom,mh=MAP_H*zoom;
-  panX=Math.max(0,Math.min(panX,mw-W));
-  panY=Math.max(0,Math.min(panY,mh-H));
-}
-
-function zoomIn(){zoom=Math.min(2.5,zoom+0.2);render();}
-function zoomOut(){zoom=Math.max(0.5,zoom-0.2);render();}
+function zoomIn(){ if(gmap) gmap.setZoom(gmap.getZoom()+1); }
+function zoomOut(){ if(gmap) gmap.setZoom(gmap.getZoom()-1); }
 function centerMap(){
-  const W=getW(),H=getH();
-  panX=MAP_W*zoom/2-W/2;panY=MAP_H*zoom/2-H/2;render();
+  if(gmap) gmap.setCenter({lat:userLat, lng:userLng});
 }
 
 // ══════════════════════════════════════════════════════
@@ -2211,46 +2222,11 @@ function obFinish(){
 // ══════════════════════════════════════════════════════
 //  MAP INTERACTION
 // ══════════════════════════════════════════════════════
-function initMapEvents(){
-  const area=document.getElementById('map-area');
-  area.addEventListener('mousedown',e=>{
-    if(e.target.closest('[onclick]')&&!e.target.closest('#map-area'))return;
-    isDragging=true;dragSX=e.clientX;dragSY=e.clientY;panSX=panX;panSY=panY;
-  },{passive:true});
-  window.addEventListener('mousemove',e=>{
-    if(!isDragging)return;
-    panX=panSX-(e.clientX-dragSX);panY=panSY-(e.clientY-dragSY);render();
-  });
-  window.addEventListener('mouseup',()=>{isDragging=false;});
-  area.addEventListener('touchstart',e=>{
-    if(e.touches.length===1){
-      const t=e.touches[0];
-      isDragging=true;dragSX=t.clientX;dragSY=t.clientY;panSX=panX;panSY=panY;
-    } else if(e.touches.length===2){
-      isDragging=false;
-      lastDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-    }
-  },{passive:true});
-  area.addEventListener('touchmove',e=>{
-    if(e.touches.length===1&&isDragging){
-      const t=e.touches[0];
-      panX=panSX-(t.clientX-dragSX);panY=panSY-(t.clientY-dragSY);render();
-    } else if(e.touches.length===2&&lastDist){
-      const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-      zoom=Math.max(0.5,Math.min(2.5,zoom*(d/lastDist)));lastDist=d;render();
-    }
-  },{passive:true});
-  area.addEventListener('touchend',e=>{if(e.touches.length===0){isDragging=false;lastDist=null;}},{passive:true});
-}
-
 // ══════════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════
 window.addEventListener('load',()=>{
-  centerMap();
   renderSheet();
-  initMapEvents();
-  window.addEventListener('resize',render);
 
   // Rileva se siamo dentro la WebView dell'app (non browser normale)
   const isWebView = !window.chrome && navigator.userAgent.includes('Android') && !navigator.userAgent.includes('Chrome/');
