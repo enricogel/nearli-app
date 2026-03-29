@@ -79,15 +79,7 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;backgroun
 
 
 /* ── USER DOT ── */
-#user-dot{
-  position:absolute;z-index:6;
-  width:18px;height:18px;border-radius:50%;
-  background:var(--blue);border:3px solid #fff;
-  box-shadow:0 0 0 6px rgba(96,165,250,0.25);
-  animation:upulse 2s infinite;pointer-events:none;
-  top:50%;left:50%;transform:translate(-50%,-50%);
-}
-@keyframes upulse{0%,100%{box-shadow:0 0 0 6px rgba(96,165,250,0.25);}50%{box-shadow:0 0 0 10px rgba(96,165,250,0.1);}}
+#user-dot{display:none;}
 
 /* ── SHEET (barra richieste) ── */
 #sheet{
@@ -849,6 +841,7 @@ const demoIncarichi={
 let gmap = null;
 let userLat = 45.4654, userLng = 9.1859; // Default: Milano
 let gmapMarkers = [];
+let userMarker = null;
 
 function initGoogleMap(){
   const mapDiv = document.getElementById('map-canvas');
@@ -864,29 +857,53 @@ function initGoogleMap(){
       {featureType:'road',elementType:'geometry.stroke',stylers:[{color:'#243046'}]},
       {featureType:'road.highway',elementType:'geometry',stylers:[{color:'#243046'}]},
       {featureType:'water',elementType:'geometry',stylers:[{color:'#0a0f1a'}]},
-      {featureType:'poi.park',elementType:'geometry',stylers:[{color:'rgba(34,84,44,0.4)'}]},
+      {featureType:'poi.park',elementType:'geometry',stylers:[{color:'#162a1a'}]},
       {featureType:'poi',elementType:'labels',stylers:[{visibility:'off'}]},
       {featureType:'transit',stylers:[{visibility:'off'}]},
     ]
   });
+
   // Geolocalizzazione reale
   if(navigator.geolocation){
     navigator.geolocation.getCurrentPosition(pos=>{
       userLat = pos.coords.latitude;
       userLng = pos.coords.longitude;
       gmap.setCenter({lat:userLat, lng:userLng});
+      placeUserMarker();
       renderMarkers();
     }, ()=>{
+      placeUserMarker();
       renderMarkers();
-    });
+    }, {enableHighAccuracy:true, timeout:10000});
   } else {
+    placeUserMarker();
     renderMarkers();
   }
-  // User dot al centro
-  const userDot = document.getElementById('user-dot');
-  if(userDot) userDot.style.display = 'block';
-  renderMarkers();
   document.getElementById('sheet-title').textContent=`${requests.length} richieste nella zona`;
+}
+
+function placeUserMarker(){
+  if(!gmap) return;
+  if(userMarker) userMarker.setMap(null);
+  // Punto blu pulsante come marker reale sulla mappa
+  const dotDiv = document.createElement('div');
+  dotDiv.style.cssText = `width:18px;height:18px;border-radius:50%;background:#60a5fa;border:3px solid #fff;box-shadow:0 0 0 8px rgba(96,165,250,0.25);`;
+  const userOverlay = new google.maps.OverlayView();
+  userOverlay.onAdd = function(){
+    this.getPanes().overlayLayer.appendChild(dotDiv);
+  };
+  userOverlay.draw = function(){
+    const proj = this.getProjection();
+    const p = proj.fromLatLngToDivPixel(new google.maps.LatLng(userLat, userLng));
+    if(p){
+      dotDiv.style.position = 'absolute';
+      dotDiv.style.left = (p.x - 9) + 'px';
+      dotDiv.style.top  = (p.y - 9) + 'px';
+    }
+  };
+  userOverlay.onRemove = function(){ dotDiv.remove(); };
+  userOverlay.setMap(gmap);
+  userMarker = userOverlay;
 }
 
 function fuzz(id,seed){return(Math.sin(id*9301+seed*49297)*0.5+0.5);}
