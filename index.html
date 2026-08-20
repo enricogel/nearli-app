@@ -3848,7 +3848,7 @@ async function cancellaRichiesta(reqId){
     const r2 = requests.find(x=>String(x.id)===String(reqId));
     if(r2){
       const totale = r2.price + Math.round(r2.price * 0.1);
-      callCF('/sbloccaEscrow', { importoEuro:totale }).catch(e=>console.log('Errore sblocco escrow:', e));
+      callCF('/sbloccaEscrow', { richiestaId:String(reqId) }).catch(e=>console.log('Errore sblocco escrow:', e));
       walletData.saldo = (walletData.saldo||0) + totale;
       walletData.escrow = Math.max(0, (walletData.escrow||0) - totale);
     }
