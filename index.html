@@ -2519,7 +2519,7 @@ function openDetail(id, rFittizio){
          </div>`
       : currentUser && r.user === currentUser.name
       ? `<div class="info-box" style="margin-bottom:16px;text-align:center;color:var(--muted);">Questa è una tua richiesta</div>
-         <button onclick="cancellaRichiesta('${r.id}')" style="width:100%;padding:11px;background:rgba(248,113,113,0.08);border:1.5px solid rgba(248,113,113,0.2);border-radius:11px;color:#f87171;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;margin-bottom:8px;">🗑 Cancella richiesta</button>`
+         <button id="btn-cancella-${r.id}" onclick="cancellaRichiesta('${r.id}')" style="width:100%;padding:11px;background:rgba(248,113,113,0.08);border:1.5px solid rgba(248,113,113,0.2);border-radius:11px;color:#f87171;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;margin-bottom:8px;">🗑 Cancella richiesta</button>`
       : demoIncarichi.aiutante.find(inc=>inc.title===r.title && (inc.stato==='slot_proposto'||inc.stato==='candidato'))
         ? `<div class="info-box yellow" style="margin-bottom:16px;text-align:center;">${r.dateMode==='fixed' ? '⏳ Candidatura inviata — in attesa di risposta dall\'inserzionista' : '⏳ Hai già proposto i tuoi slot — in attesa di conferma'}</div>`
         : currentUser
@@ -2534,6 +2534,28 @@ function openDetail(id, rFittizio){
       const el = document.getElementById('detail-user-stars');
       if(el && s && s.count > 0) el.innerHTML = renderStelle(s.media, s.count, 11);
     });
+  }
+  // Nascondi "Cancella richiesta" se esiste già una candidatura accettata o
+  // successiva per questa richiesta (stesso controllo hasAccettata già usato
+  // nella vista "richieste ricevute" — vedi buildIncarichiView). Il bottone
+  // è già renderizzato sopra (sincrono): qui lo rimuoviamo se serve, dopo
+  // aver verificato lo stato reale delle candidature su Firestore. Il blocco
+  // resta comunque garantito lato server (cancellaRichiesta risponde 400).
+  if(currentUser && r.user === currentUser.name){
+    fetch('https://firestore.googleapis.com/v1/projects/appaiutomappa-d595e/databases/(default)/documents/candidature?pageSize=100')
+      .then(resp => resp.ok ? resp.json() : null)
+      .then(data => {
+        if(!data || !data.documents) return;
+        const hasAccettata = data.documents.some(doc => {
+          const obj = parseFirestoreDoc(doc.fields || {});
+          return String(obj.reqId) === String(r.id) && ['accettata','finito_ins','finito_ait','disputa'].includes(obj.stato);
+        });
+        if(hasAccettata){
+          const btn = document.getElementById('btn-cancella-'+r.id);
+          if(btn) btn.remove();
+        }
+      })
+      .catch(e => console.log('Errore controllo candidature:', e));
   }
 }
 // ══════════════════════════════════════════════════════
@@ -3843,22 +3865,26 @@ async function cancellaRichiesta(reqId){
     ? 'Vuoi cancellare questa richiesta? Nessuna penale entro 30 minuti dalla pubblicazione.'
     : 'Attenzione: sono passati più di 30 minuti. La commissione (10%) non verrà rimborsata se sono già presenti candidature. Confermi la cancellazione?';
   try{ await customConfirm(msg); }catch(e){ return; }
-  // Sblocca fondi escrow
+  // Un'unica chiamata: il server verifica proprietario, controlla che non
+  // ci siano candidature già accettate/in corso, sblocca l'escrow e cancella
+  // la richiesta, tutto insieme (vedi cancellaRichiesta in functions/index.js).
+  // Non ottimistica: aspettiamo l'esito prima di toccare lo stato locale,
+  // perché il server può rifiutare la cancellazione (es. candidatura attiva).
+  let result;
   try{
-    const r2 = requests.find(x=>String(x.id)===String(reqId));
-    if(r2){
-      const totale = r2.price + Math.round(r2.price * 0.1);
-      callCF('/sbloccaEscrow', { richiestaId:String(reqId) }).catch(e=>console.log('Errore sblocco escrow:', e));
-      walletData.saldo = (walletData.saldo||0) + totale;
-      walletData.escrow = Math.max(0, (walletData.escrow||0) - totale);
-    }
-  }catch(e){ console.log('Errore sblocco:', e); }
+    result = await callCF('/cancellaRichiesta', { reqId:String(reqId) });
+  }catch(e){
+    toast('❌ ' + (e.message || 'Impossibile cancellare la richiesta'));
+    return;
+  }
+  if(result.error){
+    toast('❌ ' + result.error);
+    return;
+  }
   requests = requests.filter(x=>String(x.id)!==String(reqId));
   window.richiesteAccettate.add(String(reqId));
-  // Rimuovi da Firestore
-  callCF('/cancellaRichiesta', { reqId:String(reqId) }).catch(e=>console.log('Errore cancellazione Firestore:', e));
-  // Rimuovi anche dagli incarichi
   demoIncarichi.richieste = demoIncarichi.richieste.filter(x=>x.reqId!==reqId);
+  if(currentUser?.uid) caricaWalletDaFirestore(currentUser.uid);
   closeModal('detailModal');
   renderMarkers();
   buildIncarichiView('richieste');
