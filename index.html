@@ -2542,14 +2542,31 @@ function openDetail(id, rFittizio){
   // aver verificato lo stato reale delle candidature su Firestore. Il blocco
   // resta comunque garantito lato server (cancellaRichiesta risponde 400).
   if(currentUser && r.user === currentUser.name){
-    fetch('https://firestore.googleapis.com/v1/projects/appaiutomappa-d595e/databases/(default)/documents/candidature?pageSize=100')
+    fetch('https://firestore.googleapis.com/v1/projects/appaiutomappa-d595e/databases/(default)/documents:runQuery', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{collectionId:'candidature'}],
+          where: {
+            compositeFilter: {
+              op: 'AND',
+              filters: [
+                {fieldFilter:{field:{fieldPath:'reqId'}, op:'EQUAL', value:{stringValue:String(r.id)}}},
+                {fieldFilter:{field:{fieldPath:'stato'}, op:'IN', value:{arrayValue:{values:[
+                  {stringValue:'accettata'},{stringValue:'finito_ins'},{stringValue:'finito_ait'},{stringValue:'disputa'}
+                ]}}}}
+              ]
+            }
+          },
+          limit: 1
+        }
+      })
+    })
       .then(resp => resp.ok ? resp.json() : null)
       .then(data => {
-        if(!data || !data.documents) return;
-        const hasAccettata = data.documents.some(doc => {
-          const obj = parseFirestoreDoc(doc.fields || {});
-          return String(obj.reqId) === String(r.id) && ['accettata','finito_ins','finito_ait','disputa'].includes(obj.stato);
-        });
+        if(!Array.isArray(data)) return;
+        const hasAccettata = data.some(row => row && row.document);
         if(hasAccettata){
           const btn = document.getElementById('btn-cancella-'+r.id);
           if(btn) btn.remove();
