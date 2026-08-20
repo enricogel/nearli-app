@@ -2916,7 +2916,7 @@ function proponiSlot(id){
         };
         callCF('/salvaCandidatura', { candidatura }).then(()=>{
           // Notifica all'inserzionista
-          if(r.uid) callCF('/inviaNotifica', { toUid:r.uid, titolo:'Nuova candidatura!', corpo:currentUser.name+' si è candidato per: '+r.title }).catch(()=>{});
+          if(r.uid) callCF('/inviaNotifica', { toUid:r.uid, reqId:String(r.id), tipo:'nuova_candidatura' }).catch(()=>{});
         }).catch(e=>console.log('Errore salvataggio candidatura:', e));
         demoIncarichi.aiutante.push({
           id:'ia'+Date.now(),
@@ -4016,7 +4016,7 @@ async function dichiaraLavoroFinito(reqId, candidatoUid, candidatoNome){
     const result = await callCF('/aggiornaCandidatura', { docId, stato:'finito_ins' });
     if(result.error) throw new Error(result.error);
     // Notifica all'aiutante
-    callCF('/inviaNotifica', { toUid:candidatoUid, titolo:'Lavoro confermato', corpo:'L\'inserzionista ha dichiarato il lavoro completato' }).catch(()=>{});
+    callCF('/inviaNotifica', { toUid:candidatoUid, reqId:String(reqId), tipo:'lavoro_confermato' }).catch(()=>{});
     if(result.result?.entrambiFiniti){
       toast('🎉 Lavoro completato! Valuta l\'aiutante.');
       // NON rimuovere la richiesta - resta per la valutazione
@@ -4039,7 +4039,7 @@ async function lavoroFinito(incId){
     const result = await callCF('/aggiornaCandidatura', { docId, stato:'finito_ait' });
     if(result.error) throw new Error(result.error);
     // Notifica all'inserzionista
-    callCF('/inviaNotifica', { toUid:inc.inserzionistagUid||'', titolo:'Lavoro completato', corpo:currentUser.name+' ha dichiarato il lavoro completato' }).catch(()=>{});
+    callCF('/inviaNotifica', { toUid:inc.inserzionistagUid||'', reqId:String(inc.reqId), tipo:'lavoro_completato' }).catch(()=>{});
     inc.stato='lavoro_finito';
     // Forza repaint DOM per aggiornare la UI
     requestAnimationFrame(() => {
@@ -4790,15 +4790,9 @@ async function accettaSlot(reqId, candidatoUid, candidatoNome, slot){
     }
     const result = await callCF('/aggiornaCandidatura', { docId, stato:'accettata', slotScelto:slotLabel });
     if(result.error) throw new Error(result.error);
-    // Notifica all'aiutante - cerca uid Google dalla candidatura
-    const docIdForNotif = String(reqId) + '_' + candidatoUid;
-    fetch('https://firestore.googleapis.com/v1/projects/appaiutomappa-d595e/databases/(default)/documents/candidature/'+docIdForNotif)
-      .then(r=>r.json()).then(candDoc=>{
-        const uidPerNotifica = candDoc.fields?.candidatoUidGoogle?.stringValue || candidatoUid;
-        callCF('/inviaNotifica', { toUid:uidPerNotifica, titolo:'Candidatura accettata! 🎉', corpo:'Il tuo appuntamento per "'+(requests.find(x=>String(x.id)===String(reqId))?.title||'incarico')+'" è confermato' }).catch(()=>{});
-      }).catch(()=>{
-        callCF('/inviaNotifica', { toUid:candidatoUid, titolo:'Candidatura accettata! 🎉', corpo:'Appuntamento confermato!' }).catch(()=>{});
-      });
+    // Notifica all'aiutante - l'uid Google del destinatario viene risolto
+    // lato server dalla candidatura verificata, non serve più recuperarlo qui
+    callCF('/inviaNotifica', { toUid:candidatoUid, reqId:String(reqId), tipo:'candidatura_accettata' }).catch(()=>{});
     // Nascondi dalla mappa ma mantieni in requests per Incarichi
     const rIdx = requests.findIndex(x=>String(x.id)===String(reqId));
     if(rIdx > -1){ requests[rIdx]._nascosta = true; }
