@@ -1278,7 +1278,7 @@ async function fsGetToken(){
   try{ const user = fbAuth.currentUser; if(!user) return null; return await user.getIdToken(); }catch(e){ return null; }
 }
 
-async function fsSet(collection, docId, data){
+async function fsSet(path, data){
   try{
     const token = await fsGetToken();
     if(!token) return false;
@@ -1291,7 +1291,7 @@ async function fsSet(collection, docId, data){
       else fields[k]={stringValue:JSON.stringify(v)};
     }
     const mask = Object.keys(fields).map(k=>`updateMask.fieldPaths=${k}`).join('&');
-    const res = await fetch(`${FS_BASE}/${collection}/${docId}?${mask}`, {
+    const res = await fetch(`${FS_BASE}/${path}?${mask}`, {
       method:'PATCH',
       headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
       body:JSON.stringify({fields})
@@ -1300,11 +1300,11 @@ async function fsSet(collection, docId, data){
   }catch(e){ return false; }
 }
 
-async function fsGet(collection, docId){
+async function fsGet(path){
   try{
     const token = await fsGetToken();
     if(!token) return null;
-    const res = await fetch(`${FS_BASE}/${collection}/${docId}`, {headers:{'Authorization':`Bearer ${token}`}});
+    const res = await fetch(`${FS_BASE}/${path}`, {headers:{'Authorization':`Bearer ${token}`}});
     if(!res.ok) return null;
     const doc = await res.json();
     if(!doc.fields) return null;
@@ -1321,8 +1321,10 @@ async function fsGet(collection, docId){
 
 async function saveUserProfile(){
   if(!currentUser?.uid) return;
-  await fsSet('users', currentUser.uid, {
-    name: currentUser.name||'',
+  await fsSet(`users/${currentUser.uid}`, {
+    name: currentUser.name||''
+  });
+  await fsSet(`users/${currentUser.uid}/private/profile`, {
     email: currentUser.email||'',
     method: currentUser.method||'',
     tcAccettati: tcAccettati?'true':'false',
@@ -1334,12 +1336,16 @@ async function saveUserProfile(){
 
 async function loadUserProfile(){
   if(!currentUser?.uid) return;
-  const data = await fsGet('users', currentUser.uid);
-  if(!data) return;
-  if(data.dac7){ try{ const d=typeof data.dac7==='object'?data.dac7:JSON.parse(data.dac7); Object.assign(dac7Data,d); saveDac7(); }catch(e){} }
-  if(data.tcAccettati==='true'||data.tcAccettati===true){ tcAccettati=true; try{ localStorage.setItem('nearli_tc','1'); }catch(e){} }
-  if(data.idVerificata==='true'||data.idVerificata===true){ idVerificata=true; try{ localStorage.setItem('nearli_id_verified','1'); }catch(e){} }
-  window._scontoDisponibile = (data.scontoDisponibile===true);
+  const [data, financeData] = await Promise.all([
+    fsGet(`users/${currentUser.uid}/private/profile`),
+    fsGet(`users/${currentUser.uid}/private/finance`)
+  ]);
+  if(data){
+    if(data.dac7){ try{ const d=typeof data.dac7==='object'?data.dac7:JSON.parse(data.dac7); Object.assign(dac7Data,d); saveDac7(); }catch(e){} }
+    if(data.tcAccettati==='true'||data.tcAccettati===true){ tcAccettati=true; try{ localStorage.setItem('nearli_tc','1'); }catch(e){} }
+    if(data.idVerificata==='true'||data.idVerificata===true){ idVerificata=true; try{ localStorage.setItem('nearli_id_verified','1'); }catch(e){} }
+  }
+  window._scontoDisponibile = (financeData?.scontoDisponibile===true);
 }
 
 // ── SISTEMA PROMO COMMISSIONI ──
@@ -1512,7 +1518,7 @@ setInterval(()=>{
   if(token && currentUser && currentUser.uid && !window._pushTokenSaved){
     window._pushTokenSaved = true;
     toast('📱 Token: '+token.slice(0,20)+'...');
-    fsSet('users', currentUser.uid, { pushToken: token }).then(ok=>{ if(!ok) window._pushTokenSaved = false; });
+    fsSet(`users/${currentUser.uid}/private/profile`, { pushToken: token }).then(ok=>{ if(!ok) window._pushTokenSaved = false; });
   }
 }, 3000);
 
@@ -1543,8 +1549,10 @@ setInterval(()=>{ if(currentUser?.uid) caricaCandidatureUtente(currentUser.uid);
 
 async function caricaDac7DaFirestore(uid){
   try{
-    const url = `https://firestore.googleapis.com/v1/projects/appaiutomappa-d595e/databases/(default)/documents/users/${uid}`;
-    const resp = await fetch(url);
+    const token = await fsGetToken();
+    if(!token) return;
+    const url = `https://firestore.googleapis.com/v1/projects/appaiutomappa-d595e/databases/(default)/documents/users/${uid}/private/profile`;
+    const resp = await fetch(url, {headers:{'Authorization':`Bearer ${token}`}});
     if(!resp.ok) return;
     const data = await resp.json();
     if(!data.fields?.dac7) return;
@@ -1648,7 +1656,7 @@ fbAuth.onAuthStateChanged(user => {
     // Salva token push
     const savePushToken = () => {
       if(window._expoPushToken){
-        fsSet('users', uid, { pushToken: window._expoPushToken }).catch(()=>{});
+        fsSet(`users/${uid}/private/profile`, { pushToken: window._expoPushToken }).catch(()=>{});
       }
     };
     savePushToken();
@@ -2085,7 +2093,7 @@ window.handleGoogleLoginFromNative = function(user){
         const googleUid = user.uid;
         // Salva email e googleUid nel documento Firebase uid per lookup notifiche
         const userEmail = user.email || result.user.email || '';
-        fsSet('users', firebaseUid, {
+        fsSet(`users/${firebaseUid}/private/profile`, {
           email: userEmail,
           name: user.name||result.user.displayName||'',
           googleUid: googleUid,
@@ -2103,7 +2111,7 @@ window.handleGoogleLoginFromNative = function(user){
   if(window.ReactNativeWebView) window.ReactNativeWebView.postMessage('userLoggedIn');
   // Salva token push
   if(window._expoPushToken){
-    fsSet('users', user.uid, { pushToken: window._expoPushToken }).catch(()=>{});
+    fsSet(`users/${user.uid}/private/profile`, { pushToken: window._expoPushToken }).catch(()=>{});
   }
   caricaDac7DaFirestore(user.uid);
   toast('✅ Accesso con Google effettuato!');
