@@ -386,9 +386,11 @@ async function inviaValutazioneIns(reqId, valutato, nomeValutato){
   try{
     await callCF('/salvaValutazione', { valutato, valutatore: currentUser.uid, stelle, reqId });
     toast('✅ Valutazione inviata!');
-    // Segna candidatura come valutata su Firestore
-    const docId = String(reqId) + '_' + String(valutato);
-    callCF('/aggiornaCandidatura', { docId, stato:'valutata_ins', stelleRicevute: stelle }).catch(e=>console.log('Err:', e));
+    // "Ho valutato" vive solo in valutazioni (query in caricaMieValutazioni):
+    // non scriviamo più stato:'valutata_ins' sulla candidatura, perché quel
+    // campo è condiviso con la valutazione dell'aiutante (valutata_ait) e chi
+    // scrive per secondo sovrascriverebbe l'esito dell'altro.
+    window.mieValutazioniReqIds.add(String(reqId));
     window.richiesteCompletate.add(String(reqId));
     requests = requests.filter(x=>String(x.id)!==String(reqId));
     caricaWalletDaFirestore(currentUser.uid);
@@ -417,9 +419,9 @@ async function inviaValutazioneInc(incId, valutato, nomeValutato, reqId){
   try{
     await callCF('/salvaValutazione', { valutato, valutatore: currentUser.uid, stelle, reqId });
     toast('✅ Valutazione inviata!');
-    // Segna candidatura come valutata su Firestore
-    const docIdAit = String(reqId) + '_' + String(currentUser.uid);
-    callCF('/aggiornaCandidatura', { docId:docIdAit, stato:'valutata_ait' }).catch(e=>console.log('Err:', e));
+    // Vedi commento in inviaValutazioneIns: "ho valutato" vive solo in
+    // valutazioni, non tocchiamo più lo stato della candidatura.
+    window.mieValutazioniReqIds.add(String(reqId));
     demoIncarichi.aiutante = demoIncarichi.aiutante.filter(x=>x.id!==incId);
     await caricaStoricoDaFirestore(currentUser.uid);
     buildIncarichiView('storico');
@@ -433,36 +435,6 @@ function showIncarichiBadge(){
 function clearIncarichiBadge(){
   const badge = document.getElementById('incarichi-badge');
   if(badge) badge.style.display = 'none';
-}
-
-// ── VALUTAZIONI ──
-let _ratingData = { stelle: 0, valutato: '', reqId: '' };
-
-function selectRatingStar(n){
-  _ratingData.stelle = n;
-  const stars = document.querySelectorAll('#rating-stars span');
-  stars.forEach((s,i) => { s.style.opacity = i < n ? '1' : '0.3'; s.style.color = i < n ? '#f5c842' : ''; });
-}
-
-function mostraValutazione(valutato, nomeValutato, reqId){
-  _ratingData = { stelle: 0, valutato, reqId };
-  document.getElementById('rating-subtitle').textContent = 'Come è stata la tua esperienza con ' + nomeValutato + '?';
-  selectRatingStar(0);
-  openModal('ratingModal');
-}
-
-async function inviaValutazione(){
-  if(_ratingData.stelle === 0){ toast('⚠️ Seleziona almeno 1 stella'); return; }
-  try{
-    await callCF('/salvaValutazione', {
-      valutato: _ratingData.valutato,
-      valutatore: currentUser.uid,
-      stelle: _ratingData.stelle,
-      reqId: _ratingData.reqId
-    });
-    toast('✅ Valutazione inviata!');
-  }catch(e){ console.log('Errore valutazione:', e); }
-  closeModal('ratingModal');
 }
 
 </script>
@@ -1578,7 +1550,7 @@ async function caricaDac7DaFirestore(uid){
 async function caricaStoricoDaFirestore(uid){
   try{
     const url = 'https://firestore.googleapis.com/v1/projects/appaiutomappa-d595e/databases/(default)/documents/candidature?pageSize=100';
-    const resp = await fetch(url);
+    const [, resp] = await Promise.all([caricaMieValutazioni(uid), fetch(url)]);
     if(!resp.ok) return;
     const data = await resp.json();
     if(!data.documents) return;
@@ -1588,11 +1560,15 @@ async function caricaStoricoDaFirestore(uid){
       const reqId = String(obj.reqId);
       const prezzo = Number(obj.reqPrice) || 0;
       const stelle = Number(obj.stelleRicevute) || 5;
-      
+      // "Ho valutato questo reqId" implica di per sé che il lavoro sia
+      // concluso (salvaValutazione lo verifica server-side), quindi basta
+      // questo controllo — non serve più leggere lo stato della candidatura.
+      const hoGiaValutato = window.mieValutazioniReqIds.has(reqId);
+
       // Storico INSERZIONISTA: solo se questo utente è l'inserzionista
-      const sonoInserzionista = obj.inserzionista === currentUser?.name || 
+      const sonoInserzionista = obj.inserzionista === currentUser?.name ||
                                 (obj.inserzionistagUid && obj.inserzionistagUid === uid);
-      if(obj.stato === 'valutata_ins' && sonoInserzionista &&
+      if(hoGiaValutato && sonoInserzionista &&
          !demoIncarichi.conclusi.find(x=>String(x.reqId)===reqId && x.ruolo==='inserzionista')){
         demoIncarichi.conclusi.unshift({
           id:'c_ins_'+reqId, reqId,
@@ -1603,11 +1579,12 @@ async function caricaStoricoDaFirestore(uid){
         });
         window.richiesteCompletate.add(reqId);
       }
-      
-      // Storico AIUTANTE: solo se questo utente è il candidato
+
+      // Storico AIUTANTE: solo se questo utente è il candidato, e solo dopo
+      // che LUI (non l'inserzionista) ha effettivamente valutato — simmetrico
+      // al ramo inserzionista sopra.
       const sonoAiutante = obj.candidatoUid === uid || obj.candidatoUid === currentUser?.uid;
-      if((obj.stato === 'completata' || obj.stato === 'valutata_ins') && 
-         sonoAiutante && !sonoInserzionista &&
+      if(hoGiaValutato && sonoAiutante && !sonoInserzionista &&
          !demoIncarichi.conclusi.find(x=>String(x.reqId)===reqId && x.ruolo==='aiutante')){
         demoIncarichi.conclusi.unshift({
           id:'c_ait_'+reqId, reqId,
@@ -1619,6 +1596,44 @@ async function caricaStoricoDaFirestore(uid){
       }
     });
   }catch(e){ console.log('Storico err:', e); }
+}
+
+// ── "Ho già valutato?" — fonte di verità indipendente dallo stato condiviso
+// della candidatura (che una valutazione non tocca più, vedi salvaValutazione/
+// inviaValutazioneIns/inviaValutazioneInc). Un solo fetch per sessione: tutte
+// le valutazioni inviate dall'utente corrente, indicizzate per reqId. Le
+// funzioni che ne hanno bisogno (caricaCandidatureUtente, caricaStoricoDaFirestore)
+// fanno await su questa stessa promise cache, quindi non importa quale delle
+// due parte per prima al login: entrambe vedono lo stesso Set già pronto.
+window.mieValutazioniReqIds = new Set();
+let _mieValutazioniPromise = null;
+
+function caricaMieValutazioni(uid){
+  if(_mieValutazioniPromise) return _mieValutazioniPromise;
+  _mieValutazioniPromise = (async () => {
+    try{
+      const url = 'https://firestore.googleapis.com/v1/projects/appaiutomappa-d595e/databases/(default)/documents:runQuery';
+      const body = {
+        structuredQuery: {
+          from: [{ collectionId: 'valutazioni' }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath: 'valutatore' },
+              op: 'EQUAL',
+              value: { stringValue: uid }
+            }
+          }
+        }
+      };
+      const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if(!resp.ok) return;
+      const rows = await resp.json();
+      window.mieValutazioniReqIds = new Set(
+        (rows||[]).filter(r=>r.document).map(r=>String(parseFirestoreDoc(r.document.fields||{}).reqId))
+      );
+    }catch(e){ console.log('Errore caricamento valutazioni:', e); }
+  })();
+  return _mieValutazioniPromise;
 }
 
 async function caricaWalletDaFirestore(uid){
@@ -1667,6 +1682,9 @@ fbAuth.onAuthStateChanged(user => {
     // Reset dati DAC7 al logout
     Object.assign(dac7Data, {compilato:false,nome:'',cf:'',dob:'',indirizzo:'',paese:'IT',transazioni:0,guadagnoTotale:0});
     try{ localStorage.removeItem('nearli_dac7'); localStorage.removeItem('nearli_dac7_uid'); }catch(e){}
+    // Reset cache valutazioni: legata all'uid della sessione appena chiusa
+    window.mieValutazioniReqIds = new Set();
+    _mieValutazioniPromise = null;
     updateAuthUI();
   }
 });
@@ -1969,7 +1987,7 @@ function accettaTC(){
 async function caricaCandidatureUtente(uid){
   try{
     const url = `https://firestore.googleapis.com/v1/projects/appaiutomappa-d595e/databases/(default)/documents/candidature?pageSize=100`;
-    const resp = await fetch(url);
+    const [, resp] = await Promise.all([caricaMieValutazioni(uid), fetch(url)]);
     if(!resp.ok) return;
     const data = await resp.json();
     if(!data.documents) return;
@@ -1977,25 +1995,31 @@ async function caricaCandidatureUtente(uid){
     demoIncarichi.aiutante = [];
     data.documents.forEach(doc => {
       const obj = parseFirestoreDoc(doc.fields || {});
-      // Se inserzionista e candidatura completata o valutata → richiesta resta visibile per la valutazione
-      if((obj.stato === 'completata' || obj.stato === 'valutata_ins') && currentUser && (obj.inserzionista === currentUser.name || obj.inserzionistagUid === currentUser.uid || obj.inserzionistagUid === uid)){
-        if(obj.stato === 'valutata_ins'){
-          // Già valutata — nascondi dalla vista
+      // 'completata'/'valutata_ins'/'valutata_ait' sono tutti equivalenti a
+      // "lavoro concluso operativamente": la valutazione stessa non tocca più
+      // questo stato (vedi inviaValutazioneIns/inviaValutazioneInc), quindi
+      // valutata_ins/valutata_ait restano solo per compatibilità con
+      // candidature storiche scritte prima di questo fix.
+      const lavoroConcluso = obj.stato === 'completata' || obj.stato === 'valutata_ins' || obj.stato === 'valutata_ait';
+      // Se inserzionista e candidatura conclusa → richiesta resta visibile per la valutazione
+      if(lavoroConcluso && currentUser && (obj.inserzionista === currentUser.name || obj.inserzionistagUid === currentUser.uid || obj.inserzionistagUid === uid)){
+        if(window.mieValutazioniReqIds.has(String(obj.reqId))){
+          // Ho già valutato — nascondi dalla vista
           window.richiesteCompletate.add(String(obj.reqId));
           requests = requests.filter(x=>String(x.id)!==String(obj.reqId));
         }
-        // Se solo completata — lascia visibile per la valutazione
+        // Se non ho ancora valutato — lascia visibile per la valutazione
       }
-      const isInserzionista = obj.inserzionista === currentUser?.name || 
+      const isInserzionista = obj.inserzionista === currentUser?.name ||
                                requests.some(r=>String(r.id)===String(obj.reqId) && r.user===currentUser?.name);
-      const isAiutante = (obj.candidatoUid === uid || obj.candidatoUid === currentUser?.uid) && !isInserzionista && obj.stato !== 'rifiutata' && obj.stato !== 'valutata_ins' && obj.stato !== 'valutata_ait';
+      const isAiutante = (obj.candidatoUid === uid || obj.candidatoUid === currentUser?.uid) && !isInserzionista && obj.stato !== 'rifiutata';
       if(isAiutante && !demoIncarichi.aiutante.find(x=>String(x.reqId)===String(obj.reqId))){
-        if(obj.stato === 'completata' || obj.stato === 'valutata_ins'){
-          return; // Gestito da caricaStoricoDaFirestore
+        if(lavoroConcluso && window.mieValutazioniReqIds.has(String(obj.reqId))){
+          return; // Ho già valutato — gestito da caricaStoricoDaFirestore
         }
-        const statoCalc = obj.stato === 'accettata' || obj.stato === 'finito_ins' ? 'confermato' : 
+        const statoCalc = obj.stato === 'accettata' || obj.stato === 'finito_ins' ? 'confermato' :
                           obj.stato === 'finito_ait' ? 'in_attesa_ins' :
-                          obj.stato === 'completata' || obj.stato === 'valutata_ins' ? 'completata' :
+                          lavoroConcluso ? 'da_valutare' :
                           obj.stato === 'disputa' ? 'disputa' :
                           obj.stato === 'rifiutata' ? 'rifiutato' :
                           obj.slotProposti ? 'slot_proposto' : 'candidato';
@@ -3533,7 +3557,7 @@ async function buildIncarichiView(tab){
           const ids = mieRichieste.map(r=>String(r.id));
           data.documents.forEach(doc=>{
             const obj = parseFirestoreDoc(doc.fields||{});
-            if(ids.includes(String(obj.reqId)) && ['in_attesa','accettata','finito_ins','finito_ait','disputa','completata'].includes(obj.stato)) candidature.push(obj);
+            if(ids.includes(String(obj.reqId)) && ['in_attesa','accettata','finito_ins','finito_ait','disputa','completata','valutata_ins','valutata_ait'].includes(obj.stato)) candidature.push(obj);
           });
         }
       }catch(e){ console.log('Err candidature:', e); }
@@ -3551,17 +3575,23 @@ async function buildIncarichiView(tab){
           ${(()=>{
             const candReq = candidature.filter(c=>String(c.reqId)===String(r.id));
             if(!candReq.length) return '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Nessuna candidatura ancora</div>';
-            const accettata = candReq.find(c=>c.stato==='accettata'||c.stato==='finito_ins'||c.stato==='finito_ait'||c.stato==='completata'||c.stato==='disputa');            const inAttesa = candReq.filter(c=>c.stato==='in_attesa');
+            const accettata = candReq.find(c=>c.stato==='accettata'||c.stato==='finito_ins'||c.stato==='finito_ait'||c.stato==='completata'||c.stato==='disputa'||c.stato==='valutata_ins'||c.stato==='valutata_ait');            const inAttesa = candReq.filter(c=>c.stato==='in_attesa');
             let html = '';
             if(accettata){
               const statoAcc = accettata.stato;
+              // 'valutata_ins'/'valutata_ait' restano solo per compatibilità
+              // con candidature storiche: da qui in poi la valutazione non
+              // scrive più questo campo (vedi inviaValutazioneIns), quindi
+              // "concluso" e "ho già valutato" sono due domande indipendenti.
+              const lavoroConcluso = statoAcc === 'completata' || statoAcc === 'valutata_ins' || statoAcc === 'valutata_ait';
+              const hoGiaValutato = window.mieValutazioniReqIds.has(String(accettata.reqId));
               const insHaConfermato = statoAcc === 'finito_ins' || statoAcc === 'completata';
               const aitHaConfermato = statoAcc === 'finito_ait' || statoAcc === 'completata';
               const isDisputa = statoAcc === 'disputa';
               html += '<div style="background:rgba(74,222,128,0.1);border:1px solid #4ade80;border-radius:12px;padding:12px;margin-bottom:10px;">' +
                 '<div style="font-size:12px;font-weight:700;color:#4ade80;margin-bottom:6px;">✅ Incarico confermato con '+accettata.candidatoNome+'</div>' +
                 '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;">'+(accettata.slotScelto ? '📅 '+accettata.slotScelto : '')+'</div>' +
-                (statoAcc === 'completata' ? 
+                (lavoroConcluso && !hoGiaValutato ?
                   '<div style="background:rgba(74,222,128,0.08);border:1px solid #4ade80;border-radius:12px;padding:12px;margin-bottom:10px;">'+
                   '<div style="font-size:12px;font-weight:700;color:#4ade80;margin-bottom:8px;">✅ Lavoro completato — valuta l\'aiutante</div>'+
                   '<div style="display:flex;justify-content:center;gap:10px;margin-bottom:10px;" id="stars-ins-'+r.id+'">'+
@@ -3570,6 +3600,7 @@ async function buildIncarichiView(tab){
                   '<button onclick="inviaValutazioneIns(\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" '+
                   'style="width:100%;padding:12px;background:var(--accent);border:none;border-radius:10px;color:#000;font-weight:700;font-size:14px;cursor:pointer;">Invia valutazione</button>'+
                   '</div>' :
+                 lavoroConcluso && hoGiaValutato ? '<div style="font-size:12px;color:var(--green);padding:8px;background:rgba(74,222,128,0.08);border-radius:8px;">✅ Hai già valutato questo lavoro</div>' :
                  isDisputa ? '<div style="font-size:12px;color:#f87171;padding:8px;background:rgba(248,113,113,0.08);border-radius:8px;">⚠️ Disputa in corso — fondi bloccati.<br><strong style="color:#f87171;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore — Nearli deciderà entro 10 giorni lavorativi.</strong></div>' :
                  insHaConfermato ? '<div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;">⏳ Hai confermato — in attesa che l\'aiutante confermi</div>' :
                  aitHaConfermato ? '<div style="margin-bottom:8px;"><div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;margin-bottom:8px;">✅ L\'aiutante ha dichiarato il lavoro completato</div><div style="display:flex;gap:8px;"><button onclick="dichiaraLavoroFinito(\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" style="flex:1;padding:10px;background:#4ade80;border:none;border-radius:10px;color:#000;font-weight:700;font-size:13px;cursor:pointer;">✅ Conferma</button><button onclick="segnalaProblema(\''+r.id+'\',\'richieste\')" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:10px;color:#f87171;font-weight:700;font-size:13px;cursor:pointer;">🔴 Problema</button></div></div>' :
@@ -4830,22 +4861,6 @@ async function rifiutaCandidatura(reqId, candidatoUid){
     <button class="btn btn-ghost" onclick="window._confirmReject && window._confirmReject(); closeModal('confirmModal');" style="flex:1;">Annulla</button>
     <button class="btn btn-primary" onclick="window._confirmResolve && window._confirmResolve(); closeModal('confirmModal');" style="flex:1;">Conferma</button>
   </div>
-</div></div>
-
-<!-- MODALE VALUTAZIONE -->
-<div class="overlay" id="ratingModal">
-<div class="modal" onclick="event.stopPropagation()">
-  <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:8px;">⭐ Valuta l'esperienza</div>
-  <div style="font-size:13px;color:var(--muted);margin-bottom:20px;" id="rating-subtitle">Come è andata?</div>
-  <div style="display:flex;justify-content:center;gap:12px;margin-bottom:24px;" id="rating-stars">
-    <span style="font-size:40px;cursor:pointer;opacity:0.4;" onclick="selectRatingStar(1)">★</span>
-    <span style="font-size:40px;cursor:pointer;opacity:0.4;" onclick="selectRatingStar(2)">★</span>
-    <span style="font-size:40px;cursor:pointer;opacity:0.4;" onclick="selectRatingStar(3)">★</span>
-    <span style="font-size:40px;cursor:pointer;opacity:0.4;" onclick="selectRatingStar(4)">★</span>
-    <span style="font-size:40px;cursor:pointer;opacity:0.4;" onclick="selectRatingStar(5)">★</span>
-  </div>
-  <button class="btn btn-primary" onclick="inviaValutazione()" style="width:100%;margin-bottom:8px;">Invia valutazione</button>
-  <button class="btn btn-ghost" onclick="closeModal('ratingModal')" style="width:100%;">Salta</button>
 </div></div>
 
 </body>
