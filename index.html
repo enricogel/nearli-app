@@ -3603,10 +3603,10 @@ async function buildIncarichiView(tab){
                  lavoroConcluso && hoGiaValutato ? '<div style="font-size:12px;color:var(--green);padding:8px;background:rgba(74,222,128,0.08);border-radius:8px;">✅ Hai già valutato questo lavoro</div>' :
                  isDisputa ? '<div style="font-size:12px;color:#f87171;padding:8px;background:rgba(248,113,113,0.08);border-radius:8px;">⚠️ Disputa in corso — fondi bloccati.<br><strong style="color:#f87171;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore — Nearli deciderà entro 10 giorni lavorativi.</strong></div>' :
                  insHaConfermato ? '<div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;">⏳ Hai confermato — in attesa che l\'aiutante confermi</div>' :
-                 aitHaConfermato ? '<div style="margin-bottom:8px;"><div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;margin-bottom:8px;">✅ L\'aiutante ha dichiarato il lavoro completato</div><div style="display:flex;gap:8px;"><button onclick="dichiaraLavoroFinito(\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" style="flex:1;padding:10px;background:#4ade80;border:none;border-radius:10px;color:#000;font-weight:700;font-size:13px;cursor:pointer;">✅ Conferma</button><button onclick="segnalaProblema(\''+r.id+'\',\'richieste\')" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:10px;color:#f87171;font-weight:700;font-size:13px;cursor:pointer;">🔴 Problema</button></div></div>' :
+                 aitHaConfermato ? '<div style="margin-bottom:8px;"><div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;margin-bottom:8px;">✅ L\'aiutante ha dichiarato il lavoro completato</div><div style="display:flex;gap:8px;"><button onclick="dichiaraLavoroFinito(\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" style="flex:1;padding:10px;background:#4ade80;border:none;border-radius:10px;color:#000;font-weight:700;font-size:13px;cursor:pointer;">✅ Conferma</button><button onclick="segnalaProblema(\''+r.id+'\',\''+accettata.candidatoUid+'\',\'richieste\')" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:10px;color:#f87171;font-weight:700;font-size:13px;cursor:pointer;">🔴 Problema</button></div></div>' :
                 '<div style="display:flex;gap:8px;">' +
                 '<button onclick="dichiaraLavoroFinito(\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" style="flex:1;padding:10px;background:rgba(74,222,128,0.15);border:1px solid #4ade80;border-radius:10px;color:#4ade80;font-weight:700;font-size:12px;cursor:pointer;">✅ Lavoro finito</button>' +
-                '<button onclick="segnalaProblema(\''+r.id+'\',\'richieste\')" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:10px;color:#f87171;font-weight:700;font-size:12px;cursor:pointer;">🔴 Problema</button>' +
+                '<button onclick="segnalaProblema(\''+r.id+'\',\''+accettata.candidatoUid+'\',\'richieste\')" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:10px;color:#f87171;font-weight:700;font-size:12px;cursor:pointer;">🔴 Problema</button>' +
                 '</div>') +
                 '</div>';
             }
@@ -3885,7 +3885,7 @@ function renderIncCard(inc,tab){
             style="width:100%;padding:11px;background:rgba(251,146,60,0.1);border:1.5px solid rgba(251,146,60,0.3);border-radius:11px;color:#fb923c;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;margin-bottom:8px;">
             🟠 Confermo — lavoro finito male
           </button>
-          <button onclick="segnalaProblema('${inc.id}','aiutante')"
+          <button onclick="segnalaProblema('${inc.reqId}','${inc.candidatoUid}','aiutante')"
             style="width:100%;padding:11px;background:rgba(248,113,113,0.08);border:1.5px solid rgba(248,113,113,0.2);border-radius:11px;color:#f87171;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">
             🔴 Non sono d'accordo — apri disputa
           </button>`:
@@ -3893,7 +3893,7 @@ function renderIncCard(inc,tab){
           <div style="background:rgba(245,200,66,0.08);border:1px solid rgba(245,200,66,0.2);border-radius:10px;padding:8px 10px;font-size:11px;color:var(--accent);margin-bottom:8px;">
             ⏳ Hai dichiarato il lavoro completato — in attesa che l'inserzionista confermi…
           </div>
-          <button onclick="segnalaProblema('${inc.id}','aiutante')"
+          <button onclick="segnalaProblema('${inc.reqId}','${inc.candidatoUid}','aiutante')"
             style="width:100%;padding:10px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:10px;color:#f87171;font-family:'Syne',sans-serif;font-weight:600;font-size:12px;cursor:pointer;">
             🔴 Segnala problema
           </button>`:`
@@ -3901,7 +3901,7 @@ function renderIncCard(inc,tab){
             style="width:100%;padding:13px;background:rgba(74,222,128,0.12);border:1.5px solid rgba(74,222,128,0.3);border-radius:11px;color:var(--green);font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px;">
             ✅ Lavoro finito
           </button>
-          <button onclick="segnalaProblema('${inc.id}','aiutante')"
+          <button onclick="segnalaProblema('${inc.reqId}','${inc.candidatoUid}','aiutante')"
             style="width:100%;padding:10px;background:rgba(245,200,66,0.06);border:1px solid rgba(245,200,66,0.2);border-radius:11px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:600;font-size:12px;cursor:pointer;">
             🔴 Segnala problema
           </button>`}
@@ -4115,24 +4115,41 @@ async function lavoroNonFinito(incId){
   toast('Lavoro segnalato come non completato. Il compenso è stato restituito all\'inserzionista.');
 }
 
-async function segnalaProblema(incId, ruolo){
-  const desc = prompt('Descrivi il problema (annuncio fuorviante, materiali mancanti, lavoro non conforme…):');
-  if(desc===null) return;
-  const lista = ruolo==='aiutante' ? demoIncarichi.aiutante : demoIncarichi.richieste;
-  const inc = lista.find(x=>x.id===incId);
-  if(!inc) return;
-  inc.stato='disputa';
-  inc.descrizioneProblema=desc;
-  inc.disputaTimestamp=Date.now();
-  // Salva stato disputa su Firestore
+let _disputaPending = null;
+
+// reqId/candidatoUid arrivano già risolti da chi chiama (non più un incId da
+// ricercare in demoIncarichi.richieste/.aiutante: quella lista, lato
+// inserzionista, è quasi sempre vuota — la card reale legge candidature
+// fresche da Firestore — quindi una ricerca per id lì falliva silenziosamente
+// e il bottone "Segnala problema" lato inserzionista non faceva nulla).
+function segnalaProblema(reqId, candidatoUid, ruolo){
+  _disputaPending = { reqId: String(reqId), candidatoUid, ruolo };
+  const selMotivo = document.getElementById('disputa-motivo');
+  const taDescrizione = document.getElementById('disputa-descrizione');
+  if(selMotivo) selMotivo.value = '';
+  if(taDescrizione) taDescrizione.value = '';
+  openModal('disputaModal');
+}
+
+async function confermaApriDisputa(){
+  const motivo = document.getElementById('disputa-motivo').value;
+  const descrizione = document.getElementById('disputa-descrizione').value.trim();
+  if(!motivo){ toast('⚠️ Seleziona un motivo'); return; }
+  if(!descrizione){ toast('⚠️ Descrivi il problema'); return; }
+  const pending = _disputaPending;
+  if(!pending) return;
+  const docId = pending.reqId + '_' + pending.candidatoUid;
+  let result;
   try{
-    const reqId = inc.reqId || incId.replace('ia_','').replace('ir_','');
-    const candidatoUid = inc.candidatoUid || currentUser.uid;
-    const docId = String(reqId) + '_' + candidatoUid;
-    await callCF('/aggiornaCandidatura', { docId, stato:'disputa' });
-  }catch(e){ console.log('Errore salvataggio disputa:', e); }
-  buildIncarichiView(ruolo);
-  toast('⚠️ Problema segnalato. I fondi sono bloccati. Invia foto e descrizione a disputes@nearli.it — Nearli deciderà entro 10 giorni lavorativi.');
+    result = await callCF('/apriDisputa', { docId, motivo, descrizione });
+  }catch(e){ toast('❌ Errore: ' + e.message); return; }
+  if(result?.error){ toast('❌ ' + result.error); return; }
+  closeModal('disputaModal');
+  const lista = pending.ruolo==='aiutante' ? demoIncarichi.aiutante : demoIncarichi.richieste;
+  const inc = lista.find(x=>String(x.reqId)===pending.reqId);
+  if(inc) inc.stato = 'disputa';
+  buildIncarichiView(pending.ruolo);
+  toast('⚠️ Disputa aperta. I fondi sono bloccati. Nearli esaminerà la segnalazione.');
 }
 
 // ── Concludi incarico ──
@@ -4860,6 +4877,26 @@ async function rifiutaCandidatura(reqId, candidatoUid){
   <div style="display:flex;gap:10px;">
     <button class="btn btn-ghost" onclick="window._confirmReject && window._confirmReject(); closeModal('confirmModal');" style="flex:1;">Annulla</button>
     <button class="btn btn-primary" onclick="window._confirmResolve && window._confirmResolve(); closeModal('confirmModal');" style="flex:1;">Conferma</button>
+  </div>
+</div></div>
+
+<!-- MODALE APRI DISPUTA -->
+<div class="overlay" id="disputaModal" onclick="event.stopPropagation()">
+<div class="modal" onclick="event.stopPropagation()">
+  <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px;">⚠️ Segnala un problema</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">I fondi restano bloccati finché Nearli non esamina la segnalazione.</div>
+  <select class="finput" id="disputa-motivo" style="margin-bottom:12px;cursor:pointer;">
+    <option value="">Seleziona un motivo…</option>
+    <option value="non_completato">Lavoro non completato</option>
+    <option value="qualita_scadente">Qualità scadente</option>
+    <option value="mancata_presenza">Mancata presenza</option>
+    <option value="pagamento_contestato">Pagamento contestato</option>
+    <option value="altro">Altro</option>
+  </select>
+  <textarea class="finput" id="disputa-descrizione" maxlength="2000" placeholder="Descrivi cosa è successo…" style="min-height:90px;margin-bottom:16px;"></textarea>
+  <div style="display:flex;gap:10px;">
+    <button class="btn btn-ghost" onclick="closeModal('disputaModal')" style="flex:1;">Annulla</button>
+    <button class="btn btn-primary" onclick="confermaApriDisputa()" style="flex:1;">Apri disputa</button>
   </div>
 </div></div>
 
