@@ -3588,6 +3588,7 @@ async function buildIncarichiView(tab){
               const insHaConfermato = statoAcc === 'finito_ins' || statoAcc === 'completata';
               const aitHaConfermato = statoAcc === 'finito_ait' || statoAcc === 'completata';
               const isDisputa = statoAcc === 'disputa';
+              const disputeIdAcc = String(accettata.reqId)+'_'+accettata.candidatoUid;
               html += '<div style="background:rgba(74,222,128,0.1);border:1px solid #4ade80;border-radius:12px;padding:12px;margin-bottom:10px;">' +
                 '<div style="font-size:12px;font-weight:700;color:#4ade80;margin-bottom:6px;">✅ Incarico confermato con '+accettata.candidatoNome+'</div>' +
                 '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;">'+(accettata.slotScelto ? '📅 '+accettata.slotScelto : '')+'</div>' +
@@ -3601,7 +3602,7 @@ async function buildIncarichiView(tab){
                   'style="width:100%;padding:12px;background:var(--accent);border:none;border-radius:10px;color:#000;font-weight:700;font-size:14px;cursor:pointer;">Invia valutazione</button>'+
                   '</div>' :
                  lavoroConcluso && hoGiaValutato ? '<div style="font-size:12px;color:var(--green);padding:8px;background:rgba(74,222,128,0.08);border-radius:8px;">✅ Hai già valutato questo lavoro</div>' :
-                 isDisputa ? '<div style="font-size:12px;color:#f87171;padding:8px;background:rgba(248,113,113,0.08);border-radius:8px;">⚠️ Disputa in corso — fondi bloccati.<br><strong style="color:#f87171;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore — Nearli deciderà entro 10 giorni lavorativi.</strong></div>' :
+                 isDisputa ? '<div style="font-size:12px;color:#f87171;padding:8px;background:rgba(248,113,113,0.08);border-radius:8px;"><span id="disputa-status-text-'+disputeIdAcc+'">⚠️ Disputa in corso — fondi bloccati.<br><strong style="color:#f87171;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore — Nearli deciderà entro 10 giorni lavorativi.</strong></span><div id="disputa-actions-'+disputeIdAcc+'"></div></div>' :
                  insHaConfermato ? '<div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;">⏳ Hai confermato — in attesa che l\'aiutante confermi</div>' :
                  aitHaConfermato ? '<div style="margin-bottom:8px;"><div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;margin-bottom:8px;">✅ L\'aiutante ha dichiarato il lavoro completato</div><div style="display:flex;gap:8px;"><button onclick="dichiaraLavoroFinito(\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" style="flex:1;padding:10px;background:#4ade80;border:none;border-radius:10px;color:#000;font-weight:700;font-size:13px;cursor:pointer;">✅ Conferma</button><button onclick="segnalaProblema(\''+r.id+'\',\''+accettata.candidatoUid+'\',\'richieste\')" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:10px;color:#f87171;font-weight:700;font-size:13px;cursor:pointer;">🔴 Problema</button></div></div>' :
                 '<div style="display:flex;gap:8px;">' +
@@ -3666,6 +3667,11 @@ async function buildIncarichiView(tab){
           if(s && s.count > 0) el.innerHTML = renderStelle(s.media, s.count, 11);
         });
       });
+      // Fase 2 sistema dispute: carica stato/bottone per ogni disputa in corso
+      document.querySelectorAll('[id^="disputa-actions-"]').forEach(el=>{
+        const disputeId = el.id.replace('disputa-actions-','');
+        if(disputeId) caricaAzioniDisputa(disputeId, 'richieste');
+      });
     }
     return;
   }
@@ -3675,6 +3681,11 @@ async function buildIncarichiView(tab){
     return;
   }
   list.innerHTML=items.map(inc=>renderIncCard(inc,tab)).join('');
+  // Fase 2 sistema dispute: carica stato/bottone per ogni disputa in corso
+  document.querySelectorAll('[id^="disputa-actions-"]').forEach(el=>{
+    const disputeId = el.id.replace('disputa-actions-','');
+    if(disputeId) caricaAzioniDisputa(disputeId, tab);
+  });
 }
 
 function renderIncCard(inc,tab){
@@ -3755,12 +3766,14 @@ function renderIncCard(inc,tab){
       </div>`;
     // In disputa
     if(inc.stato==='disputa'){
+      const disputeIdInc = String(inc.reqId)+'_'+inc.candidatoUid;
       return`
       <div style="background:var(--surface2);border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid #f87171;">
         <div style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:6px;">${catEmoji[inc.cat]||''} ${inc.title}</div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">👤 ${inc.controparte}</div>
         <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:10px;padding:10px;font-size:12px;color:#f87171;text-align:center;">
-          ⚠️ Disputa in corso — fondi bloccati<br><span style="font-size:12px;color:#f87171;margin-top:6px;display:block;font-weight:700;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore<br>Nearli deciderà entro 10 giorni lavorativi</span>
+          <span id="disputa-status-text-${disputeIdInc}">⚠️ Disputa in corso — fondi bloccati<br><span style="font-size:12px;color:#f87171;margin-top:6px;display:block;font-weight:700;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore<br>Nearli deciderà entro 10 giorni lavorativi</span></span>
+          <div id="disputa-actions-${disputeIdInc}"></div>
         </div>
       </div>`;}
     // Confermato → pulsanti lato inserzionista
@@ -3814,12 +3827,14 @@ function renderIncCard(inc,tab){
       </div>`;
     // In disputa
     if(inc.stato==='disputa'){
+      const disputeIdInc = String(inc.reqId)+'_'+inc.candidatoUid;
       return`
       <div style="background:var(--surface2);border-radius:14px;padding:14px;margin-bottom:10px;border-left:3px solid #f87171;">
         <div style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:6px;">${catEmoji[inc.cat]||''} ${inc.title}</div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">👤 ${inc.controparte}</div>
         <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:10px;padding:10px;font-size:12px;color:#f87171;text-align:center;">
-          ⚠️ Disputa in corso — fondi bloccati<br><span style="font-size:12px;color:#f87171;margin-top:6px;display:block;font-weight:700;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore<br>Nearli deciderà entro 10 giorni lavorativi</span>
+          <span id="disputa-status-text-${disputeIdInc}">⚠️ Disputa in corso — fondi bloccati<br><span style="font-size:12px;color:#f87171;margin-top:6px;display:block;font-weight:700;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore<br>Nearli deciderà entro 10 giorni lavorativi</span></span>
+          <div id="disputa-actions-${disputeIdInc}"></div>
         </div>
       </div>`;}
     // Candidatura inviata — in attesa risposta inserzionista
@@ -4123,21 +4138,54 @@ let _disputaPending = null;
 // fresche da Firestore — quindi una ricerca per id lì falliva silenziosamente
 // e il bottone "Segnala problema" lato inserzionista non faceva nulla).
 function segnalaProblema(reqId, candidatoUid, ruolo){
-  _disputaPending = { reqId: String(reqId), candidatoUid, ruolo };
+  _disputaPending = { mode:'apri', reqId: String(reqId), candidatoUid, ruolo };
   const selMotivo = document.getElementById('disputa-motivo');
   const taDescrizione = document.getElementById('disputa-descrizione');
-  if(selMotivo) selMotivo.value = '';
+  if(selMotivo){ selMotivo.style.display=''; selMotivo.value = ''; }
   if(taDescrizione) taDescrizione.value = '';
+  document.getElementById('disputa-modal-title').textContent = '⚠️ Segnala un problema';
+  document.getElementById('disputa-modal-subtitle').textContent = 'I fondi restano bloccati finché Nearli non esamina la segnalazione.';
+  document.getElementById('disputa-modal-submit').textContent = 'Apri disputa';
+  openModal('disputaModal');
+}
+
+// Fase 2: stesso modale di segnalaProblema, ma per la controparte che
+// risponde a una disputa già aperta — solo descrizione, nessun motivo (serve
+// solo alla prima apertura).
+function apriModaleProva(disputeId, ruolo){
+  _disputaPending = { mode:'prova', disputeId, ruolo };
+  const selMotivo = document.getElementById('disputa-motivo');
+  const taDescrizione = document.getElementById('disputa-descrizione');
+  if(selMotivo) selMotivo.style.display='none';
+  if(taDescrizione) taDescrizione.value = '';
+  document.getElementById('disputa-modal-title').textContent = '✍️ Scrivi la tua versione';
+  document.getElementById('disputa-modal-subtitle').textContent = 'Racconta la tua versione dei fatti: Nearli la esaminerà insieme al resto della disputa.';
+  document.getElementById('disputa-modal-submit').textContent = 'Invia';
   openModal('disputaModal');
 }
 
 async function confermaApriDisputa(){
-  const motivo = document.getElementById('disputa-motivo').value;
-  const descrizione = document.getElementById('disputa-descrizione').value.trim();
-  if(!motivo){ toast('⚠️ Seleziona un motivo'); return; }
-  if(!descrizione){ toast('⚠️ Descrivi il problema'); return; }
   const pending = _disputaPending;
   if(!pending) return;
+  const descrizione = document.getElementById('disputa-descrizione').value.trim();
+  if(!descrizione){ toast('⚠️ Descrivi il problema'); return; }
+
+  if(pending.mode === 'prova'){
+    let result;
+    try{
+      result = await callCF('/aggiungiProvaDisputa', { disputeId: pending.disputeId, descrizione, fotoPaths: [] });
+    }catch(e){ toast('❌ Errore: ' + e.message); return; }
+    if(result?.error){ toast('❌ ' + result.error); return; }
+    closeModal('disputaModal');
+    buildIncarichiView(pending.ruolo);
+    toast(result.result?.stato === 'in_revisione'
+      ? '✅ Versione inviata. La disputa è ora in revisione da Nearli.'
+      : '✅ Versione inviata.');
+    return;
+  }
+
+  const motivo = document.getElementById('disputa-motivo').value;
+  if(!motivo){ toast('⚠️ Seleziona un motivo'); return; }
   const docId = pending.reqId + '_' + pending.candidatoUid;
   let result;
   try{
@@ -4365,6 +4413,30 @@ async function caricaStelleUtente(uid){
     }
   }catch(e){}
   return null;
+}
+
+// Fase 2 sistema dispute: la collection dispute è chiusa al client (vedi
+// firestore.rules), quindi l'unico modo per sapere se mostrare "scrivi la
+// tua versione" e in che stato è la disputa passa da leggiDisputa (Cloud
+// Function). Chiamata dopo il render della card, come caricaStelleUtente:
+// popola due placeholder già presenti nell'HTML statico (testo di stato e
+// contenitore del bottone), individuati per id da disputeId.
+async function caricaAzioniDisputa(disputeId, ruolo){
+  if(!disputeId || !currentUser?.uid) return;
+  let info;
+  try{ const r = await callCF('/leggiDisputa', { disputeId }); info = r?.result; }catch(e){}
+  if(!info) return;
+  const textEl = document.getElementById('disputa-status-text-'+disputeId);
+  const actionsEl = document.getElementById('disputa-actions-'+disputeId);
+  if(info.stato === 'in_revisione' && textEl){
+    textEl.innerHTML = '🔍 Disputa in revisione da Nearli.<br><span style="font-size:11px;color:var(--muted);">Nearli deciderà entro 10 giorni lavorativi.</span>';
+  }
+  if(actionsEl && currentUser.uid !== info.apertaDa && info.stato !== 'risolta'){
+    actionsEl.innerHTML = `<button onclick="apriModaleProva('${disputeId}','${ruolo}')"
+      style="width:100%;margin-top:8px;padding:9px;background:rgba(96,165,250,0.1);border:1px solid #60a5fa;border-radius:9px;color:#60a5fa;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;cursor:pointer;">
+      ✍️ Scrivi la tua versione
+    </button>`;
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -4880,11 +4952,11 @@ async function rifiutaCandidatura(reqId, candidatoUid){
   </div>
 </div></div>
 
-<!-- MODALE APRI DISPUTA -->
+<!-- MODALE APRI DISPUTA / AGGIUNGI PROVA (Fase 2: stesso modale, motivo nascosto in modalità "prova") -->
 <div class="overlay" id="disputaModal" onclick="event.stopPropagation()">
 <div class="modal" onclick="event.stopPropagation()">
-  <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px;">⚠️ Segnala un problema</div>
-  <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">I fondi restano bloccati finché Nearli non esamina la segnalazione.</div>
+  <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:4px;" id="disputa-modal-title">⚠️ Segnala un problema</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:16px;" id="disputa-modal-subtitle">I fondi restano bloccati finché Nearli non esamina la segnalazione.</div>
   <select class="finput" id="disputa-motivo" style="margin-bottom:12px;cursor:pointer;">
     <option value="">Seleziona un motivo…</option>
     <option value="non_completato">Lavoro non completato</option>
@@ -4896,7 +4968,7 @@ async function rifiutaCandidatura(reqId, candidatoUid){
   <textarea class="finput" id="disputa-descrizione" maxlength="2000" placeholder="Descrivi cosa è successo…" style="min-height:90px;margin-bottom:16px;"></textarea>
   <div style="display:flex;gap:10px;">
     <button class="btn btn-ghost" onclick="closeModal('disputaModal')" style="flex:1;">Annulla</button>
-    <button class="btn btn-primary" onclick="confermaApriDisputa()" style="flex:1;">Apri disputa</button>
+    <button class="btn btn-primary" id="disputa-modal-submit" onclick="confermaApriDisputa()" style="flex:1;">Apri disputa</button>
   </div>
 </div></div>
 
