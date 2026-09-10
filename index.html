@@ -212,6 +212,7 @@ textarea.finput{min-height:70px;resize:none;}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
 <script src="https://js.stripe.com/v3/"></script>
 <script>
 // ── STRIPE CONFIG ──
@@ -3602,7 +3603,7 @@ async function buildIncarichiView(tab){
                   'style="width:100%;padding:12px;background:var(--accent);border:none;border-radius:10px;color:#000;font-weight:700;font-size:14px;cursor:pointer;">Invia valutazione</button>'+
                   '</div>' :
                  lavoroConcluso && hoGiaValutato ? '<div style="font-size:12px;color:var(--green);padding:8px;background:rgba(74,222,128,0.08);border-radius:8px;">✅ Hai già valutato questo lavoro</div>' :
-                 isDisputa ? '<div style="font-size:12px;color:#f87171;padding:8px;background:rgba(248,113,113,0.08);border-radius:8px;"><span id="disputa-status-text-'+disputeIdAcc+'">⚠️ Disputa in corso — fondi bloccati.<br><strong style="color:#f87171;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore — Nearli deciderà entro 10 giorni lavorativi.</strong></span><div id="disputa-actions-'+disputeIdAcc+'"></div></div>' :
+                 isDisputa ? '<div style="font-size:12px;color:#f87171;padding:8px;background:rgba(248,113,113,0.08);border-radius:8px;"><span id="disputa-status-text-'+disputeIdAcc+'">⚠️ Disputa in corso — fondi bloccati.<br><strong style="color:#f87171;">Aggiungi foto e la tua versione dei fatti qui in app (facoltativo) — Nearli deciderà entro 10 giorni lavorativi.</strong></span><div id="disputa-actions-'+disputeIdAcc+'"></div></div>' :
                  insHaConfermato ? '<div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;">⏳ Hai confermato — in attesa che l\'aiutante confermi</div>' :
                  aitHaConfermato ? '<div style="margin-bottom:8px;"><div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;margin-bottom:8px;">✅ L\'aiutante ha dichiarato il lavoro completato</div><div style="display:flex;gap:8px;"><button onclick="dichiaraLavoroFinito(\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" style="flex:1;padding:10px;background:#4ade80;border:none;border-radius:10px;color:#000;font-weight:700;font-size:13px;cursor:pointer;">✅ Conferma</button><button onclick="segnalaProblema(\''+r.id+'\',\''+accettata.candidatoUid+'\',\'richieste\')" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:10px;color:#f87171;font-weight:700;font-size:13px;cursor:pointer;">🔴 Problema</button></div></div>' :
                 '<div style="display:flex;gap:8px;">' +
@@ -3772,7 +3773,7 @@ function renderIncCard(inc,tab){
         <div style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:6px;">${catEmoji[inc.cat]||''} ${inc.title}</div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">👤 ${inc.controparte}</div>
         <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:10px;padding:10px;font-size:12px;color:#f87171;text-align:center;">
-          <span id="disputa-status-text-${disputeIdInc}">⚠️ Disputa in corso — fondi bloccati<br><span style="font-size:12px;color:#f87171;margin-top:6px;display:block;font-weight:700;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore<br>Nearli deciderà entro 10 giorni lavorativi</span></span>
+          <span id="disputa-status-text-${disputeIdInc}">⚠️ Disputa in corso — fondi bloccati<br><span style="font-size:12px;color:#f87171;margin-top:6px;display:block;font-weight:700;">Aggiungi foto e la tua versione dei fatti qui in app (facoltativo)<br>Nearli deciderà entro 10 giorni lavorativi</span></span>
           <div id="disputa-actions-${disputeIdInc}"></div>
         </div>
       </div>`;}
@@ -3833,7 +3834,7 @@ function renderIncCard(inc,tab){
         <div style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:6px;">${catEmoji[inc.cat]||''} ${inc.title}</div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">👤 ${inc.controparte}</div>
         <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:10px;padding:10px;font-size:12px;color:#f87171;text-align:center;">
-          <span id="disputa-status-text-${disputeIdInc}">⚠️ Disputa in corso — fondi bloccati<br><span style="font-size:12px;color:#f87171;margin-top:6px;display:block;font-weight:700;">📧 Invia foto e descrizione a disputes@nearli.it entro 48 ore<br>Nearli deciderà entro 10 giorni lavorativi</span></span>
+          <span id="disputa-status-text-${disputeIdInc}">⚠️ Disputa in corso — fondi bloccati<br><span style="font-size:12px;color:#f87171;margin-top:6px;display:block;font-weight:700;">Aggiungi foto e la tua versione dei fatti qui in app (facoltativo)<br>Nearli deciderà entro 10 giorni lavorativi</span></span>
           <div id="disputa-actions-${disputeIdInc}"></div>
         </div>
       </div>`;}
@@ -4132,6 +4133,210 @@ async function lavoroNonFinito(incId){
 
 let _disputaPending = null;
 
+// ── Fase 2: upload foto in-app per le prove di disputa ──
+// _disputaFiles: {file, previewUrl, status:'pending'|'uploading'|'done'|'error',
+// errorMsg, uuid, ext, path, task} — task è l'UploadTask resumable attivo,
+// usato per poterlo annullare se l'utente chiude il modale a metà upload.
+let _disputaFiles = [];
+let _disputaUploadState = null; // {cancelled:boolean} della fase di upload in corso
+let _disputaRetryResolve = null; // resolve() della Promise "riprova o continua senza" in attesa
+let _disputaIsSubmitting = false; // nasconde i bottoni di rimozione foto durante upload/invio, per non lasciare upload orfani a metà
+
+const MAX_FOTO_DISPUTA = 3; // coerente con MAX_FOTO_PER_PROVA lato server (functions/index.js)
+const MAX_DIMENSIONE_FOTO_DISPUTA = 5 * 1024 * 1024; // coerente con dimensioneEntroLimite() in storage.rules
+
+function _disputaUuid(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{
+    const r = Math.random()*16|0, v = c==='x' ? r : (r&0x3|0x8);
+    return v.toString(16);
+  });
+}
+function _disputaExt(file){
+  const m = { 'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp', 'image/gif':'gif', 'image/heic':'heic', 'image/heif':'heif' };
+  if(m[file.type]) return m[file.type];
+  const dot = (file.name||'').lastIndexOf('.');
+  if(dot > -1 && dot < file.name.length-1) return file.name.slice(dot+1).toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,6) || 'jpg';
+  return 'jpg';
+}
+
+function renderDisputaThumbs(){
+  const box = document.getElementById('disputa-foto-thumbs');
+  if(!box) return;
+  box.innerHTML = '';
+  _disputaFiles.forEach((f, idx)=>{
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;width:56px;height:56px;';
+    const img = document.createElement('img');
+    img.src = f.previewUrl;
+    img.style.cssText = 'width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border);'
+      + (f.status==='error' ? 'outline:2px solid #f87171;' : '');
+    if(!_disputaIsSubmitting){
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.textContent = '✕';
+      rm.style.cssText = 'position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#1a1a24;border:1px solid var(--border);color:var(--text);font-size:10px;line-height:1;cursor:pointer;padding:0;';
+      rm.onclick = ()=>{
+        if(f.task){ try{ f.task.cancel(); }catch(e){} } // difesa: non dovrebbe accadere (rimozione disabilitata durante submit), ma non deve lasciare un upload orfano in corso
+        URL.revokeObjectURL(f.previewUrl);
+        _disputaFiles.splice(idx, 1);
+        renderDisputaThumbs();
+      };
+      wrap.appendChild(rm);
+    }
+    wrap.appendChild(img);
+    box.appendChild(wrap);
+  });
+  const input = document.getElementById('disputa-foto-input');
+  if(input) input.disabled = _disputaFiles.length >= MAX_FOTO_DISPUTA;
+}
+
+function onDisputaFotoChange(e){
+  const files = Array.from(e.target.files || []);
+  e.target.value = ''; // consente di riselezionare lo stesso file dopo una rimozione
+  for(const file of files){
+    if(_disputaFiles.length >= MAX_FOTO_DISPUTA){ toast(`⚠️ Massimo ${MAX_FOTO_DISPUTA} foto`); break; }
+    if(!file.type.startsWith('image/')){ toast('⚠️ Solo immagini'); continue; }
+    if(file.size > MAX_DIMENSIONE_FOTO_DISPUTA){ toast('⚠️ Foto troppo grande (max 5MB)'); continue; }
+    _disputaFiles.push({ file, previewUrl: URL.createObjectURL(file), status:'pending' });
+  }
+  renderDisputaThumbs();
+}
+
+function _disputaResetFotoState(){
+  _disputaFiles.forEach(f=>{ if(f.previewUrl) URL.revokeObjectURL(f.previewUrl); });
+  _disputaFiles = [];
+  _disputaIsSubmitting = false;
+  renderDisputaThumbs();
+  const progressBox = document.getElementById('disputa-upload-progress');
+  const retryBox = document.getElementById('disputa-upload-retry');
+  if(progressBox) progressBox.style.display = 'none';
+  if(retryBox) retryBox.style.display = 'none';
+  _disputaUploadState = null;
+  _disputaRetryResolve = null;
+}
+
+function _setDisputaSubmitting(isSubmitting){
+  _disputaIsSubmitting = isSubmitting;
+  const submitBtn = document.getElementById('disputa-modal-submit');
+  const fotoInput = document.getElementById('disputa-foto-input');
+  const progressBox = document.getElementById('disputa-upload-progress');
+  if(submitBtn){ submitBtn.disabled = isSubmitting; submitBtn.style.opacity = isSubmitting ? '0.5' : ''; }
+  if(fotoInput) fotoInput.disabled = isSubmitting || _disputaFiles.length >= MAX_FOTO_DISPUTA;
+  if(progressBox) progressBox.style.display = isSubmitting ? 'block' : 'none';
+  if(!isSubmitting){
+    const retryBox = document.getElementById('disputa-upload-retry');
+    if(retryBox) retryBox.style.display = 'none';
+  }
+  renderDisputaThumbs();
+}
+function _disputaSetPhaseText(txt){
+  const el = document.getElementById('disputa-upload-phase-text');
+  if(el) el.textContent = txt;
+}
+function _disputaSetProgress(frac){
+  const bar = document.getElementById('disputa-upload-progress-bar');
+  if(bar) bar.style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + '%';
+}
+
+// Mostra il prompt inline "Riprova / Continua senza" e risolve quando
+// l'utente sceglie — oppure quando annullaDisputaModal() lo forza a 'cancel'.
+function _disputaAskRetryOrContinue(failCount){
+  return new Promise(resolve=>{
+    const box = document.getElementById('disputa-upload-retry');
+    const textEl = document.getElementById('disputa-upload-retry-text');
+    const btnRetry = document.getElementById('disputa-upload-retry-btn');
+    const btnSkip = document.getElementById('disputa-upload-skip-btn');
+    if(!box || !textEl || !btnRetry || !btnSkip){ resolve('skip'); return; }
+    textEl.textContent = failCount===1 ? '1 foto non è stata caricata.' : `${failCount} foto non sono state caricate.`;
+    box.style.display = 'flex';
+    _disputaRetryResolve = resolve;
+    btnRetry.onclick = ()=>{ box.style.display='none'; _disputaRetryResolve=null; resolve('retry'); };
+    btnSkip.onclick = ()=>{ box.style.display='none'; _disputaRetryResolve=null; resolve('skip'); };
+  });
+}
+
+// Upload resumable di un singolo file (firebase.storage().ref().put() è
+// resumable di default nell'SDK compat): risolve sempre {ok, error?}, non
+// rigetta mai, cosí un fallimento su un file non blocca gli altri.
+function _disputaUploadFile(entry, onProgress){
+  return new Promise(resolve=>{
+    const storageRef = firebase.storage().ref(entry.path);
+    const task = storageRef.put(entry.file, { contentType: entry.file.type || 'image/jpeg' });
+    entry.task = task;
+    task.on('state_changed',
+      snap => onProgress(snap.totalBytes ? snap.bytesTransferred / snap.totalBytes : 0),
+      err => { entry.task = null; resolve({ ok:false, error: err }); },
+      () => { entry.task = null; resolve({ ok:true }); }
+    );
+  });
+}
+
+// Best-effort: elimina le foto già caricate se poi la disputa non va a buon
+// fine (chiamata CF fallita) o l'utente annulla a upload avvenuto. Non deve
+// mai bloccare l'utente: eventuali errori di delete sono ignorati.
+function _disputaCleanupUploaded(paths){
+  (paths || []).forEach(p=>{
+    try{ firebase.storage().ref(p).delete().catch(()=>{}); }catch(e){}
+  });
+}
+
+// Carica le foto selezionate su Storage, una alla volta, con testo di fase
+// "Caricamento foto (N/M)…" e barra di progresso. Se dei file falliscono,
+// offre "Riprova" (ritenta solo i falliti) o "Continua senza" (li scarta e
+// procede con quelli riusciti). Ritorna null se l'utente annulla nel
+// frattempo, altrimenti l'elenco dei path caricati con successo.
+async function _disputaRunUploadPhase(disputeId, uid, uploadState){
+  while(true){
+    const daCaricare = _disputaFiles.filter(f => f.status !== 'done');
+    for(const entry of daCaricare){
+      if(uploadState.cancelled) return null;
+      entry.status = 'uploading';
+      const fatte = _disputaFiles.filter(f=>f.status==='done').length;
+      _disputaSetPhaseText(`Caricamento foto (${fatte+1}/${_disputaFiles.length})…`);
+      _disputaSetProgress(0);
+      if(!entry.uuid){
+        entry.uuid = _disputaUuid();
+        entry.ext = _disputaExt(entry.file);
+        entry.path = `dispute_evidence/${disputeId}/${uid}/${entry.uuid}.${entry.ext}`;
+      }
+      const res = await _disputaUploadFile(entry, _disputaSetProgress);
+      if(uploadState.cancelled) return null;
+      if(res.ok){ entry.status = 'done'; _disputaSetProgress(1); }
+      else { entry.status = 'error'; entry.errorMsg = res.error?.message || 'Errore upload'; }
+      renderDisputaThumbs();
+    }
+    const falliti = _disputaFiles.filter(f=>f.status==='error');
+    if(!falliti.length) break;
+    const scelta = await _disputaAskRetryOrContinue(falliti.length);
+    if(uploadState.cancelled) return null;
+    if(scelta === 'retry'){
+      falliti.forEach(f=>{ f.status='pending'; f.uuid=null; f.path=null; }); // uuid nuovo per il retry, niente riferimenti a un tentativo precedente
+      renderDisputaThumbs();
+      continue;
+    }
+    // 'continua senza': scarta le foto fallite e procede con quelle riuscite
+    _disputaFiles = _disputaFiles.filter(f=>f.status!=='error');
+    renderDisputaThumbs();
+    break;
+  }
+  return _disputaFiles.filter(f=>f.status==='done').map(f=>f.path);
+}
+
+// Annulla è sempre cliccabile durante l'upload: interrompe eventuale upload
+// in corso, chiude il prompt riprova/continua se aperto, e ripulisce
+// (best-effort) le foto già caricate prima di chiudere il modale.
+function annullaDisputaModal(){
+  if(_disputaUploadState) _disputaUploadState.cancelled = true;
+  if(_disputaRetryResolve){ const r = _disputaRetryResolve; _disputaRetryResolve = null; r('cancel'); }
+  _disputaFiles.forEach(f=>{ if(f.task){ try{ f.task.cancel(); }catch(e){} } });
+  const giaCaricate = _disputaFiles.filter(f=>f.status==='done').map(f=>f.path);
+  if(giaCaricate.length) _disputaCleanupUploaded(giaCaricate);
+  _setDisputaSubmitting(false);
+  closeModal('disputaModal');
+  _disputaResetFotoState();
+}
+
 // reqId/candidatoUid arrivano già risolti da chi chiama (non più un incId da
 // ricercare in demoIncarichi.richieste/.aiutante: quella lista, lato
 // inserzionista, è quasi sempre vuota — la card reale legge candidature
@@ -4146,6 +4351,7 @@ function segnalaProblema(reqId, candidatoUid, ruolo){
   document.getElementById('disputa-modal-title').textContent = '⚠️ Segnala un problema';
   document.getElementById('disputa-modal-subtitle').textContent = 'I fondi restano bloccati finché Nearli non esamina la segnalazione.';
   document.getElementById('disputa-modal-submit').textContent = 'Apri disputa';
+  _disputaResetFotoState();
   openModal('disputaModal');
 }
 
@@ -4161,6 +4367,7 @@ function apriModaleProva(disputeId, ruolo){
   document.getElementById('disputa-modal-title').textContent = '✍️ Scrivi la tua versione';
   document.getElementById('disputa-modal-subtitle').textContent = 'Racconta la tua versione dei fatti: Nearli la esaminerà insieme al resto della disputa.';
   document.getElementById('disputa-modal-submit').textContent = 'Invia';
+  _disputaResetFotoState();
   openModal('disputaModal');
 }
 
@@ -4170,13 +4377,51 @@ async function confermaApriDisputa(){
   const descrizione = document.getElementById('disputa-descrizione').value.trim();
   if(!descrizione){ toast('⚠️ Descrivi il problema'); return; }
 
+  let motivo = null;
+  if(pending.mode !== 'prova'){
+    motivo = document.getElementById('disputa-motivo').value;
+    if(!motivo){ toast('⚠️ Seleziona un motivo'); return; }
+  }
+
+  const uid = currentUser?.uid;
+  if(!uid){ toast('⚠️ Devi essere loggato'); return; }
+  // disputeId coincide sempre col docId reqId_candidatoUid in modalità 'apri'
+  // (stesso schema usato lato server in apriDisputa), è già noto in modalità 'prova'.
+  const disputeId = pending.mode === 'prova' ? pending.disputeId : (pending.reqId + '_' + pending.candidatoUid);
+
+  _setDisputaSubmitting(true);
+  const uploadState = { cancelled:false };
+  _disputaUploadState = uploadState;
+
+  let fotoPaths = [];
+  if(_disputaFiles.length){
+    const esito = await _disputaRunUploadPhase(disputeId, uid, uploadState);
+    if(uploadState.cancelled){ _setDisputaSubmitting(false); return; } // annullato dall'utente durante l'upload
+    fotoPaths = esito || [];
+  }
+
+  _disputaSetPhaseText('Invio disputa…');
+  _disputaSetProgress(1);
+
   if(pending.mode === 'prova'){
     let result;
     try{
-      result = await callCF('/aggiungiProvaDisputa', { disputeId: pending.disputeId, descrizione, fotoPaths: [] });
-    }catch(e){ toast('❌ Errore: ' + e.message); return; }
-    if(result?.error){ toast('❌ ' + result.error); return; }
+      result = await callCF('/aggiungiProvaDisputa', { disputeId: pending.disputeId, descrizione, fotoPaths });
+    }catch(e){
+      toast('❌ Errore: ' + e.message);
+      _disputaCleanupUploaded(fotoPaths);
+      _setDisputaSubmitting(false);
+      return;
+    }
+    if(result?.error){
+      toast('❌ ' + result.error);
+      _disputaCleanupUploaded(fotoPaths);
+      _setDisputaSubmitting(false);
+      return;
+    }
+    _setDisputaSubmitting(false);
     closeModal('disputaModal');
+    _disputaResetFotoState();
     buildIncarichiView(pending.ruolo);
     toast(result.result?.stato === 'in_revisione'
       ? '✅ Versione inviata. La disputa è ora in revisione da Nearli.'
@@ -4184,15 +4429,25 @@ async function confermaApriDisputa(){
     return;
   }
 
-  const motivo = document.getElementById('disputa-motivo').value;
-  if(!motivo){ toast('⚠️ Seleziona un motivo'); return; }
-  const docId = pending.reqId + '_' + pending.candidatoUid;
+  const docId = disputeId;
   let result;
   try{
-    result = await callCF('/apriDisputa', { docId, motivo, descrizione });
-  }catch(e){ toast('❌ Errore: ' + e.message); return; }
-  if(result?.error){ toast('❌ ' + result.error); return; }
+    result = await callCF('/apriDisputa', { docId, motivo, descrizione, fotoPaths });
+  }catch(e){
+    toast('❌ Errore: ' + e.message);
+    _disputaCleanupUploaded(fotoPaths);
+    _setDisputaSubmitting(false);
+    return;
+  }
+  if(result?.error){
+    toast('❌ ' + result.error);
+    _disputaCleanupUploaded(fotoPaths);
+    _setDisputaSubmitting(false);
+    return;
+  }
+  _setDisputaSubmitting(false);
   closeModal('disputaModal');
+  _disputaResetFotoState();
   const lista = pending.ruolo==='aiutante' ? demoIncarichi.aiutante : demoIncarichi.richieste;
   const inc = lista.find(x=>String(x.reqId)===pending.reqId);
   if(inc) inc.stato = 'disputa';
@@ -4966,8 +5221,31 @@ async function rifiutaCandidatura(reqId, candidatoUid){
     <option value="altro">Altro</option>
   </select>
   <textarea class="finput" id="disputa-descrizione" maxlength="2000" placeholder="Descrivi cosa è successo…" style="min-height:90px;margin-bottom:16px;"></textarea>
+
+  <div style="margin-bottom:16px;">
+    <label class="section-label" style="cursor:pointer;display:inline-block;">📷 Foto (facoltative, max 3)
+      <input type="file" id="disputa-foto-input" accept="image/*" multiple style="display:none;" onchange="onDisputaFotoChange(event)">
+    </label>
+    <div id="disputa-foto-thumbs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
+  </div>
+
+  <div id="disputa-upload-progress" style="display:none;margin-bottom:16px;">
+    <div id="disputa-upload-phase-text" style="font-size:12px;color:var(--muted);margin-bottom:6px;"></div>
+    <div style="background:var(--surface2);border-radius:8px;height:6px;overflow:hidden;">
+      <div id="disputa-upload-progress-bar" style="background:linear-gradient(135deg,var(--accent),var(--accent2));height:100%;width:0%;transition:width 0.2s;"></div>
+    </div>
+  </div>
+
+  <div id="disputa-upload-retry" style="display:none;flex-direction:column;gap:8px;margin-bottom:16px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:11px;padding:10px 12px;">
+    <div id="disputa-upload-retry-text" style="font-size:12px;color:#f87171;"></div>
+    <div style="display:flex;gap:8px;">
+      <button type="button" class="btn btn-ghost" id="disputa-upload-skip-btn" style="flex:1;margin-bottom:0;">Continua senza</button>
+      <button type="button" class="btn btn-primary" id="disputa-upload-retry-btn" style="flex:1;margin-bottom:0;">Riprova</button>
+    </div>
+  </div>
+
   <div style="display:flex;gap:10px;">
-    <button class="btn btn-ghost" onclick="closeModal('disputaModal')" style="flex:1;">Annulla</button>
+    <button class="btn btn-ghost" onclick="annullaDisputaModal()" style="flex:1;">Annulla</button>
     <button class="btn btn-primary" id="disputa-modal-submit" onclick="confermaApriDisputa()" style="flex:1;">Apri disputa</button>
   </div>
 </div></div>
