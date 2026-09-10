@@ -2328,6 +2328,13 @@ function openNewRequest(){
   if(cnt) cnt.textContent='0/300';
   // Reset modalità data
   setDateMode('range');
+  // Nuovo tentativo di pubblicazione: azzera l'id stabile così submitRequest
+  // ne genera uno nuovo. Se invece submitRequest fallisce e l'utente ritenta
+  // SENZA passare di qui (bottone "Pubblica" ricliccato sullo stesso modale),
+  // window._pubblicaRichiestaId resta valorizzato e viene riusato identico —
+  // è quello che rende pubblicaRichiesta idempotente sul retry invece di
+  // ricongelare i fondi per una seconda richiesta con id diverso.
+  window._pubblicaRichiestaId = null;
   openModal('newModal');
   window._selectedAddressLat = null;
   window._selectedAddressLng = null;
@@ -2463,8 +2470,14 @@ async function submitRequest(){
 
   const notes = document.getElementById('req-notes').value.trim();
   if(!notes){ toast('⚠️ Inserisci una descrizione del lavoro'); document.getElementById('req-notes').focus(); return; }
+  // Id stabile per l'intero tentativo di pubblicazione: generato una sola
+  // volta (window._pubblicaRichiestaId azzerato da openNewRequest all'avvio
+  // di un nuovo tentativo) e riusato identico sugli eventuali retry di
+  // questo stesso submitRequest, così pubblicaRichiesta può riconoscere un
+  // retry post-errore-di-rete come tale ed evitare di ricongelare i fondi.
+  if(!window._pubblicaRichiestaId) window._pubblicaRichiestaId = 'r'+Date.now();
   const r={
-    id:'r'+Date.now(),
+    id:window._pubblicaRichiestaId,
     title:catEmoji[selectedCat]+' '+(catLabels[selectedCat]||selectedCat.charAt(0).toUpperCase()+selectedCat.slice(1)),
     cat:selectedCat,price,
     ...dateInfo,
@@ -2490,17 +2503,15 @@ async function submitRequest(){
   if(!currentUser?.uid){ toast('❌ Devi fare il login prima di pubblicare'); return; }
   if((walletData.saldo||0) < totale){ evidenziaErrore('req-price'); toast('❌ Saldo insufficiente (€'+fmt(walletData.saldo)+' disponibili). Ricarica il wallet.'); return; }
   try{
-    const result = await callCF('/congelaFondi', { importoEuro:totale, richiestaId:r.id, titolo:r.title });
+    const rPulita = JSON.parse(JSON.stringify(r));
+    const result = await callCF('/pubblicaRichiesta', { richiesta:rPulita, importoEuro:totale });
     if(result.error){ throw new Error(result.error.message||result.error); }
-    try{
-      const rPulita = JSON.parse(JSON.stringify(r));
-      await callCF('/salvaRichiesta', { richiesta:rPulita });
-    }catch(e){ console.log('Errore salvataggio richiesta:', e); }
     requests.push(r);
     registraPromoUtente();
     walletData.saldo-=totale;
     walletData.escrow=(walletData.escrow||0)+totale;
     walletData.movimenti.unshift({id:'m'+Date.now(),tipo:'pagamento',desc:'Pubblicato: '+r.title,importo:-totale,data:'Oggi',dataISO:new Date().toISOString().split('T')[0],stato:'in_escrow'});
+    window._pubblicaRichiestaId = null; // tentativo concluso con successo: il prossimo submitRequest ne genera uno nuovo
     closeModal('newModal');render();toast('✅ Richiesta pubblicata');
   } catch(e){
     toast('❌ Errore: '+e.message);
