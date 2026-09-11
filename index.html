@@ -3451,8 +3451,12 @@ async function doRicaricaConferma(imp){
 
 // Preleva
 let selPrelievo=null;
+window._prelievoClientRequestId = null;
 function openPrelievoModal(){
   selPrelievo=walletData.metodo?.tipo||null;
+  // Nuovo tentativo di prelievo: id fresco, riusato identico sugli eventuali
+  // retry di QUESTO tentativo (stesso pattern di window._ricaricaIdempotencyKey).
+  window._prelievoClientRequestId = null;
   document.getElementById('prelievo-body').innerHTML=`
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:19px;margin-bottom:4px;">Preleva fondi</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">Saldo: <strong style="color:var(--accent);">€${fmt(walletData.saldo)}</strong></div>
@@ -3510,13 +3514,22 @@ async function doPrelievo(){
   }
   try{
     const token = await fbAuth.currentUser.getIdToken();
+    // Riusa lo stesso id sui retry di questo tentativo (rete interrotta,
+    // risposta persa): generato solo se non già presente, così un secondo
+    // click dopo un errore non fa scalare il saldo due volte (vedi backend,
+    // preleva richiede clientRequestId per l'idempotenza).
+    if(!window._prelievoClientRequestId){ window._prelievoClientRequestId = crypto.randomUUID(); }
     const res = await fetch('https://us-central1-appaiutomappa-d595e.cloudfunctions.net/preleva',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-      body: JSON.stringify({data:{importoEuro:imp, iban:val, nome:currentUser?.name||''}})
+      body: JSON.stringify({data:{importoEuro:imp, iban:val, nome:currentUser?.name||'', clientRequestId:window._prelievoClientRequestId}})
     });
     const result = await res.json();
     if(result.error){ throw new Error(result.error.message); }
+    // Prelievo confermato: azzerato solo ora, non prima, così un eventuale
+    // fallimento di rete lascia l'id valorizzato per il retry (preleva lo
+    // riuserebbe restando idempotente).
+    window._prelievoClientRequestId = null;
     walletData.metodo={tipo:selPrelievo,valore:val};
     walletData.saldo-=imp;
     walletData.movimenti.unshift({id:'p'+Date.now(),tipo:'prelievo',desc:`Prelievo ${selPrelievo==='iban'?'IBAN ••••'+val.slice(-4):'PayPal '+val}`,importo:-imp,data:'Oggi',dataISO:new Date().toISOString().split('T')[0],stato:'in_attesa'});
