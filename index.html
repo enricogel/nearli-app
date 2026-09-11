@@ -221,6 +221,23 @@ window.CF_BASE = 'https://us-central1-appaiutomappa-d595e.cloudfunctions.net';
 // ── Programma "Porta un amico": cattura il codice invito dal link (?ref=UID)
 // al primo caricamento della pagina, per registrarlo dopo il login.
 window._refPendente = new URLSearchParams(window.location.search).get('ref') || null;
+// ── fetchConTimeout(): wrapper su fetch con timeout centralizzato via
+// AbortController. Se il server non risponde entro timeoutMs, la richiesta
+// viene interrotta e viene lanciato un errore leggibile invece di lasciare
+// la UI in attesa indefinita (es. bottone disabilitato per sempre).
+const CF_TIMEOUT_MS = 15000;
+async function fetchConTimeout(url, options={}, timeoutMs=CF_TIMEOUT_MS){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), timeoutMs);
+  try{
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch(e){
+    if(e.name==='AbortError'){ throw new Error('Richiesta scaduta, verifica la connessione e riprova'); }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 // ── callCF(): chiama le Cloud Functions usando il token Firebase reale
 // dell'utente loggato, al posto del vecchio secret condiviso scritto
 // nel codice. Sostituisce tutte le vecchie chiamate fetch(CF_BASE+...).
@@ -240,7 +257,7 @@ async function callCF(endpoint, payload){
     }
     if(u) idToken = await u.getIdToken();
   } catch(e){ /* utente non loggato o token non disponibile */ }
-  const res = await fetch(window.CF_BASE + endpoint, {
+  const res = await fetchConTimeout(window.CF_BASE + endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -2440,69 +2457,73 @@ async function submitRequest(){
   const btn = document.querySelector('#newModal .btn-primary');
   const originalText = btn ? btn.textContent : '';
   if(btn){ btn.textContent = '⏳ Pubblicazione in corso...'; btn.disabled = true; btn.style.opacity = '0.7'; }
-  if(!checkDatiObbligatori()) return;
-  const price=parseInt(document.getElementById('req-price').value);
-  if(!price||price<5){toast('⚠️ Il compenso minimo è €5');return;}
-  if(price!==parseFloat(document.getElementById('req-price').value)){toast('⚠️ Inserisci un numero intero');return;}
-  const address=document.getElementById('req-address').value.trim();
-  if(!address){toast('⚠️ Inserisci l\'indirizzo');return;}
-  const meetingPoint = document.getElementById('req-meeting-point')?.value.trim()||'';
-  if(!meetingPoint){evidenziaErrore('req-meeting-point');toast('⚠️ Inserisci un punto di riferimento per l\'aiutante');return;}
-
-  let dateInfo={};
-  const todayCheck = new Date().toISOString().split('T')[0];
-  if(dateMode==='range'){
-    const from=document.getElementById('req-from').value;
-    const to=document.getElementById('req-to').value;
-    if(!from||!to){toast('⚠️ Inserisci l\'arco temporale');return;}
-    if(from<todayCheck){toast('⚠️ La data iniziale non può essere nel passato');return;}
-    if(from>to){toast('⚠️ La data finale deve essere dopo quella iniziale');return;}
-    dateInfo={date:from,availFrom:from,availTo:to,fixedDate:null,fixedTime:null,dateMode:'range'};
-  } else {
-    const fixedDate=document.getElementById('req-fixed-date').value;
-    const fixedTime=document.getElementById('req-fixed-time').value;
-    const duration=document.getElementById('req-duration').value;
-    if(!fixedDate){toast('⚠️ Inserisci la data');return;}
-    if(fixedDate<todayCheck){toast('⚠️ La data non può essere nel passato');return;}
-    if(!fixedTime){toast('⚠️ Inserisci l\'orario');return;}
-    dateInfo={date:fixedDate,availFrom:fixedDate,availTo:fixedDate,fixedDate,fixedTime,duration,dateMode:'fixed'};
-  }
-
-  const notes = document.getElementById('req-notes').value.trim();
-  if(!notes){ toast('⚠️ Inserisci una descrizione del lavoro'); document.getElementById('req-notes').focus(); return; }
-  // Id stabile per l'intero tentativo di pubblicazione: generato una sola
-  // volta (window._pubblicaRichiestaId azzerato da openNewRequest all'avvio
-  // di un nuovo tentativo) e riusato identico sugli eventuali retry di
-  // questo stesso submitRequest, così pubblicaRichiesta può riconoscere un
-  // retry post-errore-di-rete come tale ed evitare di ricongelare i fondi.
-  if(!window._pubblicaRichiestaId) window._pubblicaRichiestaId = 'r'+Date.now();
-  const r={
-    id:window._pubblicaRichiestaId,
-    title:catEmoji[selectedCat]+' '+(catLabels[selectedCat]||selectedCat.charAt(0).toUpperCase()+selectedCat.slice(1)),
-    cat:selectedCat,price,
-    ...dateInfo,
-    user:currentUser.name,
-    uid:currentUser.uid,
-    address,interno:document.getElementById('req-interno').value,
-    contactMethod:'citofono',contactValue:currentUser.name.split(' ').pop(),
-    meetingPoint: document.getElementById('req-meeting-point')?.value.trim()||'',
-    notes,
-    materiali: document.getElementById('req-materiali-val')?.value || 'si',
-    fasce: [...document.querySelectorAll('#time-chips > div')].filter(c=>c.dataset.active==='1').map(c=>c.dataset.value),
-    mx:0.3+Math.random()*0.4,my:0.3+Math.random()*0.4,
-    lat: (window._selectedAddressLat || userLat) + (Math.random()-0.5)*0.0027,
-    lng: (window._selectedAddressLng || userLng) + (Math.random()-0.5)*0.0027,
-    pubblicataAt: Date.now()
-  };
-  const pct = getCommPct();
-  const comm=Math.round(price*pct/100);
-  const totale=price+comm;
-  const promoMsg = pct < STANDARD_COMM_PCT ? ` (commissione promozionale ${pct}%!)` : '';
-
-  // Congela fondi dal wallet (arco temporale)
-  if(!currentUser?.uid){ toast('❌ Devi fare il login prima di pubblicare'); return; }
-  if((walletData.saldo||0) < totale){ evidenziaErrore('req-price'); toast('❌ Saldo insufficiente (€'+fmt(walletData.saldo)+' disponibili). Ricarica il wallet.'); return; }
+  // Guard anti-doppio-tap + validazioni: l'intero corpo, comprese tutte le
+  // validazioni del form, è avvolto in try/finally così ogni uscita
+  // anticipata (return di validazione, successo o errore di rete) riabilita
+  // sempre il bottone — stesso pattern usato in doPrelievo.
   try{
+    if(!checkDatiObbligatori()) return;
+    const price=parseInt(document.getElementById('req-price').value);
+    if(!price||price<5){toast('⚠️ Il compenso minimo è €5');return;}
+    if(price!==parseFloat(document.getElementById('req-price').value)){toast('⚠️ Inserisci un numero intero');return;}
+    const address=document.getElementById('req-address').value.trim();
+    if(!address){toast('⚠️ Inserisci l\'indirizzo');return;}
+    const meetingPoint = document.getElementById('req-meeting-point')?.value.trim()||'';
+    if(!meetingPoint){evidenziaErrore('req-meeting-point');toast('⚠️ Inserisci un punto di riferimento per l\'aiutante');return;}
+
+    let dateInfo={};
+    const todayCheck = new Date().toISOString().split('T')[0];
+    if(dateMode==='range'){
+      const from=document.getElementById('req-from').value;
+      const to=document.getElementById('req-to').value;
+      if(!from||!to){toast('⚠️ Inserisci l\'arco temporale');return;}
+      if(from<todayCheck){toast('⚠️ La data iniziale non può essere nel passato');return;}
+      if(from>to){toast('⚠️ La data finale deve essere dopo quella iniziale');return;}
+      dateInfo={date:from,availFrom:from,availTo:to,fixedDate:null,fixedTime:null,dateMode:'range'};
+    } else {
+      const fixedDate=document.getElementById('req-fixed-date').value;
+      const fixedTime=document.getElementById('req-fixed-time').value;
+      const duration=document.getElementById('req-duration').value;
+      if(!fixedDate){toast('⚠️ Inserisci la data');return;}
+      if(fixedDate<todayCheck){toast('⚠️ La data non può essere nel passato');return;}
+      if(!fixedTime){toast('⚠️ Inserisci l\'orario');return;}
+      dateInfo={date:fixedDate,availFrom:fixedDate,availTo:fixedDate,fixedDate,fixedTime,duration,dateMode:'fixed'};
+    }
+
+    const notes = document.getElementById('req-notes').value.trim();
+    if(!notes){ toast('⚠️ Inserisci una descrizione del lavoro'); document.getElementById('req-notes').focus(); return; }
+    // Id stabile per l'intero tentativo di pubblicazione: generato una sola
+    // volta (window._pubblicaRichiestaId azzerato da openNewRequest all'avvio
+    // di un nuovo tentativo) e riusato identico sugli eventuali retry di
+    // questo stesso submitRequest, così pubblicaRichiesta può riconoscere un
+    // retry post-errore-di-rete come tale ed evitare di ricongelare i fondi.
+    if(!window._pubblicaRichiestaId) window._pubblicaRichiestaId = 'r'+Date.now();
+    const r={
+      id:window._pubblicaRichiestaId,
+      title:catEmoji[selectedCat]+' '+(catLabels[selectedCat]||selectedCat.charAt(0).toUpperCase()+selectedCat.slice(1)),
+      cat:selectedCat,price,
+      ...dateInfo,
+      user:currentUser.name,
+      uid:currentUser.uid,
+      address,interno:document.getElementById('req-interno').value,
+      contactMethod:'citofono',contactValue:currentUser.name.split(' ').pop(),
+      meetingPoint: document.getElementById('req-meeting-point')?.value.trim()||'',
+      notes,
+      materiali: document.getElementById('req-materiali-val')?.value || 'si',
+      fasce: [...document.querySelectorAll('#time-chips > div')].filter(c=>c.dataset.active==='1').map(c=>c.dataset.value),
+      mx:0.3+Math.random()*0.4,my:0.3+Math.random()*0.4,
+      lat: (window._selectedAddressLat || userLat) + (Math.random()-0.5)*0.0027,
+      lng: (window._selectedAddressLng || userLng) + (Math.random()-0.5)*0.0027,
+      pubblicataAt: Date.now()
+    };
+    const pct = getCommPct();
+    const comm=Math.round(price*pct/100);
+    const totale=price+comm;
+    const promoMsg = pct < STANDARD_COMM_PCT ? ` (commissione promozionale ${pct}%!)` : '';
+
+    // Congela fondi dal wallet (arco temporale)
+    if(!currentUser?.uid){ toast('❌ Devi fare il login prima di pubblicare'); return; }
+    if((walletData.saldo||0) < totale){ evidenziaErrore('req-price'); toast('❌ Saldo insufficiente (€'+fmt(walletData.saldo)+' disponibili). Ricarica il wallet.'); return; }
     const rPulita = JSON.parse(JSON.stringify(r));
     const result = await callCF('/pubblicaRichiesta', { richiesta:rPulita, importoEuro:totale });
     if(result.error){ throw new Error(result.error.message||result.error); }
@@ -2515,7 +2536,8 @@ async function submitRequest(){
     closeModal('newModal');render();toast('✅ Richiesta pubblicata');
   } catch(e){
     toast('❌ Errore: '+e.message);
-    // Ripristina pulsante in caso di errore
+  } finally {
+    // Ripristina il bottone su ogni uscita: validazione fallita, successo o errore
     if(btn){ btn.textContent = originalText; btn.disabled = false; btn.style.opacity = '1'; }
   }
 }
@@ -2933,7 +2955,7 @@ function dac7StatusBadge(){
 }
 
 function proponiSlot(id){
-  requireAuth('Offri aiuto', ()=>{
+  requireAuth('Offri aiuto', async ()=>{
     if(!checkDatiObbligatori()) return;
     closeModal('detailModal');
     const r=requests.find(x=>x.id===id);
@@ -2958,19 +2980,23 @@ function proponiSlot(id){
           stato: 'in_attesa',
           timestamp: Date.now()
         };
-        callCF('/salvaCandidatura', { candidatura }).then(()=>{
-          // Notifica all'inserzionista
+        try{
+          const result = await callCF('/salvaCandidatura', { candidatura });
+          if(result.error){ throw new Error(result.error.message||result.error); }
+          // Notifica all'inserzionista (best-effort, non blocca la UI)
           if(r.uid) callCF('/inviaNotifica', { toUid:r.uid, reqId:String(r.id), tipo:'nuova_candidatura' }).catch(()=>{});
-        }).catch(e=>console.log('Errore salvataggio candidatura:', e));
-        demoIncarichi.aiutante.push({
-          id:'ia'+Date.now(),
-          reqId:r.id,
-          title:r.title, price:r.price, cat:r.cat,
-          stato:'candidato',
-          controparte:r.user,
-          date:r.fixedDate, time:r.fixedTime,
-        });
-        toast('✅ Candidatura inviata! Trovi lo stato in Incarichi → Aiutante.');
+          demoIncarichi.aiutante.push({
+            id:'ia'+Date.now(),
+            reqId:r.id,
+            title:r.title, price:r.price, cat:r.cat,
+            stato:'candidato',
+            controparte:r.user,
+            date:r.fixedDate, time:r.fixedTime,
+          });
+          toast('✅ Candidatura inviata! Trovi lo stato in Incarichi → Aiutante.');
+        } catch(e){
+          toast('⚠️ Errore invio candidatura: '+(e.message||'riprova'));
+        }
       } else {
         buildSlotModal(id);
         setTimeout(()=>openModal('slotModal'), 100);
@@ -3071,7 +3097,7 @@ function buildSlotModal(reqId){
   `;
 }
 
-function submitSlots(reqId){
+async function submitSlots(reqId){
   const slots=[];
   for(let n=1;n<=3;n++){
     const d=document.getElementById('slot-date-'+n)?.value;
@@ -3103,20 +3129,24 @@ function submitSlots(reqId){
     slotProposti: slots.map(fmtSlot),
     timestamp: Date.now()
   };
-  callCF('/salvaCandidatura', { candidatura }).catch(e=>console.log('Errore salvataggio slot:', e));
+  try{
+    const result = await callCF('/salvaCandidatura', { candidatura });
+    if(result.error){ throw new Error(result.error.message||result.error); }
+    demoIncarichi.aiutante.push({
+      id:'ia'+Date.now(),
+      title:r.title, price:r.price, cat:r.cat,
+      stato:'slot_proposto',
+      controparte:r.user,
+      date:slots[0].date, time:slots[0].time,
+      slotProposti:slots.map(fmtSlot),
+    });
 
-  demoIncarichi.aiutante.push({
-    id:'ia'+Date.now(),
-    title:r.title, price:r.price, cat:r.cat,
-    stato:'slot_proposto',
-    controparte:r.user,
-    date:slots[0].date, time:slots[0].time,
-    slotProposti:slots.map(fmtSlot),
-  });
-
-  addAccettato(currentUser.name);
-  closeModal('slotModal');
-  toast('✅ Slot inviati!');
+    addAccettato(currentUser.name);
+    closeModal('slotModal');
+    toast('✅ Slot inviati!');
+  } catch(e){
+    toast('⚠️ Errore invio slot: '+(e.message||'riprova'));
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -3410,7 +3440,7 @@ async function doRicaricaConferma(imp){
     // stata generata a questo punto (es. init edge case), la generiamo al
     // volo invece di mandare undefined a Stripe.
     if(!window._ricaricaIdempotencyKey){ window._ricaricaIdempotencyKey = crypto.randomUUID(); }
-    const res = await fetch('https://us-central1-appaiutomappa-d595e.cloudfunctions.net/creaPaymentIntent', {
+    const res = await fetchConTimeout('https://us-central1-appaiutomappa-d595e.cloudfunctions.net/creaPaymentIntent', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
       body: JSON.stringify({data:{importoCent: Math.round(imp*100), idempotencyKey: window._ricaricaIdempotencyKey}})
@@ -3424,7 +3454,7 @@ async function doRicaricaConferma(imp){
     });
     if(confirmError){ throw new Error(confirmError.message); }
 
-    const res2 = await fetch('https://us-central1-appaiutomappa-d595e.cloudfunctions.net/confermaRicarica',{
+    const res2 = await fetchConTimeout('https://us-central1-appaiutomappa-d595e.cloudfunctions.net/confermaRicarica',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
       body: JSON.stringify({data:{paymentIntentId: paymentIntent.id}})
@@ -3481,7 +3511,7 @@ function openPrelievoModal(){
     <div id="prel-input-wrap" style="display:${walletData.metodo?'block':'none'};margin-bottom:14px;">
       ${(()=>{const isIban=walletData.metodo?.tipo==='iban';const lbl=isIban?'IBAN':'Email PayPal';const ph=isIban?'IT60 X054...':'';const val=walletData.metodo?.valore||'';return`<div class="field"><label id="prel-input-label">${lbl}</label><input class="finput" id="prel-input-val" placeholder="${ph}" value="${val}"/></div>`;})()}
     </div>
-    <button class="btn btn-primary" onclick="doPrelievo()">↑ Conferma prelievo</button>
+    <button class="btn btn-primary" id="prel-confirm-btn" onclick="doPrelievo()">↑ Conferma prelievo</button>
     <button class="btn btn-ghost" onclick="closeModal('prelievoModal')">Annulla</button>`;
   openModal('prelievoModal');
 }
@@ -3499,27 +3529,33 @@ function selPrel(t){
   document.getElementById('prel-input-val').placeholder=t==='iban'?'IT60 X054 2811...':'nome@email.com';
 }
 async function doPrelievo(){
-  const imp=parseFloat(document.getElementById('prel-imp')?.value);
-  const val=document.getElementById('prel-input-val')?.value?.trim();
-  if(!selPrelievo){toast('⚠️ Seleziona metodo');return;}
-  if(!val){toast('⚠️ Inserisci '+(selPrelievo==='iban'?'IBAN':'email'));return;}
-  if(!imp||imp<=0){toast('⚠️ Importo non valido');return;}
-  if(imp<10){toast('⚠️ Prelievo minimo €10');return;}
-  if(imp>walletData.saldo){toast('⚠️ Saldo insufficiente');return;}
-  if((dac7Data.guadagnoTotale>=2000||dac7Data.transazioni>=25)&&!dac7Data.compilato){
-    toast('⚠️ Devi inserire i dati fiscali prima di prelevare (soglia DAC7 raggiunta)');
-    closeModal('prelievoModal');
-    openModal('dac7Modal');
-    return;
-  }
+  // Guard anti-doppio-tap: disabilitato subito, prima di qualunque await,
+  // così un secondo click durante l'attesa della risposta non parte in
+  // concorrenza. Riabilitato in finally su ogni percorso (validazione,
+  // successo o errore).
+  const btn = document.getElementById('prel-confirm-btn');
+  if(btn) btn.disabled = true;
   try{
+    const imp=parseFloat(document.getElementById('prel-imp')?.value);
+    const val=document.getElementById('prel-input-val')?.value?.trim();
+    if(!selPrelievo){toast('⚠️ Seleziona metodo');return;}
+    if(!val){toast('⚠️ Inserisci '+(selPrelievo==='iban'?'IBAN':'email'));return;}
+    if(!imp||imp<=0){toast('⚠️ Importo non valido');return;}
+    if(imp<10){toast('⚠️ Prelievo minimo €10');return;}
+    if(imp>walletData.saldo){toast('⚠️ Saldo insufficiente');return;}
+    if((dac7Data.guadagnoTotale>=2000||dac7Data.transazioni>=25)&&!dac7Data.compilato){
+      toast('⚠️ Devi inserire i dati fiscali prima di prelevare (soglia DAC7 raggiunta)');
+      closeModal('prelievoModal');
+      openModal('dac7Modal');
+      return;
+    }
     const token = await fbAuth.currentUser.getIdToken();
     // Riusa lo stesso id sui retry di questo tentativo (rete interrotta,
     // risposta persa): generato solo se non già presente, così un secondo
     // click dopo un errore non fa scalare il saldo due volte (vedi backend,
     // preleva richiede clientRequestId per l'idempotenza).
     if(!window._prelievoClientRequestId){ window._prelievoClientRequestId = crypto.randomUUID(); }
-    const res = await fetch('https://us-central1-appaiutomappa-d595e.cloudfunctions.net/preleva',{
+    const res = await fetchConTimeout('https://us-central1-appaiutomappa-d595e.cloudfunctions.net/preleva',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
       body: JSON.stringify({data:{importoEuro:imp, iban:val, nome:currentUser?.name||'', clientRequestId:window._prelievoClientRequestId}})
@@ -3538,6 +3574,8 @@ async function doPrelievo(){
     toast(`✅ Prelievo €${fmt(imp)} richiesto — elaborato entro 2-3 giorni`);
   } catch(e){
     toast('⚠️ Errore: '+(e.message||'riprova'));
+  } finally {
+    if(btn) btn.disabled = false;
   }
 }
 
@@ -3641,9 +3679,9 @@ async function buildIncarichiView(tab){
                  lavoroConcluso && hoGiaValutato ? '<div style="font-size:12px;color:var(--green);padding:8px;background:rgba(74,222,128,0.08);border-radius:8px;">✅ Hai già valutato questo lavoro</div>' :
                  isDisputa ? '<div style="font-size:12px;color:#f87171;padding:8px;background:rgba(248,113,113,0.08);border-radius:8px;"><span id="disputa-status-text-'+disputeIdAcc+'">⚠️ Disputa in corso — fondi bloccati.<br><strong style="color:#f87171;">Aggiungi foto e la tua versione dei fatti qui in app (facoltativo) — Nearli deciderà entro 10 giorni lavorativi.</strong></span><div id="disputa-actions-'+disputeIdAcc+'"></div></div>' :
                  insHaConfermato ? '<div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;">⏳ Hai confermato — in attesa che l\'aiutante confermi</div>' :
-                 aitHaConfermato ? '<div style="margin-bottom:8px;"><div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;margin-bottom:8px;">✅ L\'aiutante ha dichiarato il lavoro completato</div><div style="display:flex;gap:8px;"><button onclick="dichiaraLavoroFinito(\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" style="flex:1;padding:10px;background:#4ade80;border:none;border-radius:10px;color:#000;font-weight:700;font-size:13px;cursor:pointer;">✅ Conferma</button><button onclick="segnalaProblema(\''+r.id+'\',\''+accettata.candidatoUid+'\',\'richieste\')" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:10px;color:#f87171;font-weight:700;font-size:13px;cursor:pointer;">🔴 Problema</button></div></div>' :
+                 aitHaConfermato ? '<div style="margin-bottom:8px;"><div style="font-size:12px;color:var(--accent);padding:8px;background:rgba(245,200,66,0.08);border-radius:8px;margin-bottom:8px;">✅ L\'aiutante ha dichiarato il lavoro completato</div><div style="display:flex;gap:8px;"><button onclick="dichiaraLavoroFinito(this,\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" style="flex:1;padding:10px;background:#4ade80;border:none;border-radius:10px;color:#000;font-weight:700;font-size:13px;cursor:pointer;">✅ Conferma</button><button onclick="segnalaProblema(\''+r.id+'\',\''+accettata.candidatoUid+'\',\'richieste\')" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:10px;color:#f87171;font-weight:700;font-size:13px;cursor:pointer;">🔴 Problema</button></div></div>' :
                 '<div style="display:flex;gap:8px;">' +
-                '<button onclick="dichiaraLavoroFinito(\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" style="flex:1;padding:10px;background:rgba(74,222,128,0.15);border:1px solid #4ade80;border-radius:10px;color:#4ade80;font-weight:700;font-size:12px;cursor:pointer;">✅ Lavoro finito</button>' +
+                '<button onclick="dichiaraLavoroFinito(this,\''+r.id+'\',\''+accettata.candidatoUid+'\',\''+accettata.candidatoNome+'\')" style="flex:1;padding:10px;background:rgba(74,222,128,0.15);border:1px solid #4ade80;border-radius:10px;color:#4ade80;font-weight:700;font-size:12px;cursor:pointer;">✅ Lavoro finito</button>' +
                 '<button onclick="segnalaProblema(\''+r.id+'\',\''+accettata.candidatoUid+'\',\'richieste\')" style="flex:1;padding:10px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:10px;color:#f87171;font-weight:700;font-size:12px;cursor:pointer;">🔴 Problema</button>' +
                 '</div>') +
                 '</div>';
@@ -3659,16 +3697,16 @@ async function buildIncarichiView(tab){
                       const parts = s.split('|');
                       const dataF = parts[0] ? fmtDate(parts[0]) : '';
                       const oraF = parts[1] || '';
-                      slotsHtml += '<button onclick="accettaSlot(\''+r.id+'\',\''+c.candidatoUid+'\',\''+c.candidatoNome+'\',\''+s+'\')" style="display:block;width:100%;margin-bottom:6px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;cursor:pointer;text-align:left;touch-action:manipulation;">✅ '+dataF+(oraF?' ore '+oraF:'')+'</button>';
+                      slotsHtml += '<button onclick="accettaSlot(this,\''+r.id+'\',\''+c.candidatoUid+'\',\''+c.candidatoNome+'\',\''+s+'\')" style="display:block;width:100%;margin-bottom:6px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;cursor:pointer;text-align:left;touch-action:manipulation;">✅ '+dataF+(oraF?' ore '+oraF:'')+'</button>';
                     });
-                    slotsHtml += '<button onclick="rifiutaCandidatura(\''+r.id+'\',\''+c.candidatoUid+'\')" style="width:100%;padding:8px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:8px;color:#f87171;font-weight:700;font-size:12px;cursor:pointer;touch-action:manipulation;">✗ Rifiuta tutti gli slot</button>';
+                    slotsHtml += '<button onclick="rifiutaCandidatura(this,\''+r.id+'\',\''+c.candidatoUid+'\')" style="width:100%;padding:8px;background:rgba(248,113,113,0.1);border:1px solid #f87171;border-radius:8px;color:#f87171;font-weight:700;font-size:12px;cursor:pointer;touch-action:manipulation;">✗ Rifiuta tutti gli slot</button>';
                     return '<div style="background:var(--surface);border-radius:10px;padding:12px;margin-bottom:8px;">'+slotsHtml+'</div>';
                   } else {
                     return '<div style="background:var(--surface);border-radius:10px;padding:12px;margin-bottom:8px;">'+
                       '<div style="font-size:13px;font-weight:700;margin-bottom:10px;">👤 '+c.candidatoNome+' <span id="cand-stars-'+c.candidatoUid+'"></span></div>'+
                       '<div style="display:flex;gap:10px;">'+
-                      '<button onclick="accettaSlot(\''+r.id+'\',\''+c.candidatoUid+'\',\''+c.candidatoNome+'\',\'\')" style="flex:1;padding:12px;background:#4ade80;border:none;border-radius:10px;color:#000;font-weight:700;font-size:14px;cursor:pointer;touch-action:manipulation;">✓ Accetta</button>'+
-                      '<button onclick="rifiutaCandidatura(\''+r.id+'\',\''+c.candidatoUid+'\')" style="flex:1;padding:12px;background:#f87171;border:none;border-radius:10px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;touch-action:manipulation;">✗ Rifiuta</button>'+
+                      '<button onclick="accettaSlot(this,\''+r.id+'\',\''+c.candidatoUid+'\',\''+c.candidatoNome+'\',\'\')" style="flex:1;padding:12px;background:#4ade80;border:none;border-radius:10px;color:#000;font-weight:700;font-size:14px;cursor:pointer;touch-action:manipulation;">✓ Accetta</button>'+
+                      '<button onclick="rifiutaCandidatura(this,\''+r.id+'\',\''+c.candidatoUid+'\')" style="flex:1;padding:12px;background:#f87171;border:none;border-radius:10px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;touch-action:manipulation;">✗ Rifiuta</button>'+
                       '</div></div>';
                   }
                 }).join('');
@@ -3949,7 +3987,7 @@ function renderIncCard(inc,tab){
             style="width:100%;padding:10px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:10px;color:#f87171;font-family:'Syne',sans-serif;font-weight:600;font-size:12px;cursor:pointer;">
             🔴 Segnala problema
           </button>`:`
-          <button onclick="lavoroFinito('${inc.id}')"
+          <button onclick="lavoroFinito(this,'${inc.id}')"
             style="width:100%;padding:13px;background:rgba(74,222,128,0.12);border:1.5px solid rgba(74,222,128,0.3);border-radius:11px;color:var(--green);font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px;">
             ✅ Lavoro finito
           </button>
@@ -4100,8 +4138,12 @@ function confermaLavoroMale(incId){
   toast('Confermato. Il compenso è stato restituito all\'inserzionista. La commissione del 10% è stata trattenuta da Nearli.');
 }
 
-async function dichiaraLavoroFinito(reqId, candidatoUid, candidatoNome){
+async function dichiaraLavoroFinito(btnEl, reqId, candidatoUid, candidatoNome){
   try{ await customConfirm('Confermi che il lavoro è stato completato correttamente?'); }catch(e){ return; }
+  // Guard anti-doppio-tap: disabilitato solo per la durata della chiamata di
+  // rete (dopo la conferma, che è già un blocco separato), riabilitato in
+  // finally su successo o errore — stesso pattern di doPrelievo.
+  if(btnEl) btnEl.disabled = true;
   try{
     const docId = String(reqId) + '_' + candidatoUid;
     const result = await callCF('/aggiornaCandidatura', { docId, stato:'finito_ins' });
@@ -4118,13 +4160,14 @@ async function dichiaraLavoroFinito(reqId, candidatoUid, candidatoNome){
       toast('✅ Confermato! In attesa che l\'aiutante confermi.');
       buildIncarichiView('richieste');
     }
-  } catch(e){ toast('❌ Errore: '+e.message); }
+  } catch(e){ toast('❌ Errore: '+e.message); } finally { if(btnEl) btnEl.disabled = false; }
 }
 
-async function lavoroFinito(incId){
+async function lavoroFinito(btnEl, incId){
   const inc = demoIncarichi.aiutante.find(x=>x.id===incId);
   if(!inc) return;
   try{ await customConfirm('Confermi che il lavoro è stato completato?'); }catch(e){ return; }
+  if(btnEl) btnEl.disabled = true;
   try{
     const docId = String(inc.reqId) + '_' + (inc.candidatoUid || currentUser.uid);
     const result = await callCF('/aggiornaCandidatura', { docId, stato:'finito_ait' });
@@ -4151,7 +4194,7 @@ async function lavoroFinito(incId){
       toast('✅ Confermato! In attesa che l\'inserzionista confermi.');
       buildIncarichiView('aiutante');
     }
-  } catch(e){ toast('❌ Errore: '+e.message); }
+  } catch(e){ toast('❌ Errore: '+e.message); } finally { if(btnEl) btnEl.disabled = false; }
 }
 
 async function lavoroNonFinito(incId){
@@ -5195,7 +5238,9 @@ window.addEventListener('load',()=>{
 });
 
 // ── Accetta slot (candidature reali da Firestore) ──
-async function accettaSlot(reqId, candidatoUid, candidatoNome, slot){
+async function accettaSlot(btnEl, reqId, candidatoUid, candidatoNome, slot){
+  // Guard anti-doppio-tap, stesso pattern di doPrelievo
+  if(btnEl) btnEl.disabled = true;
   toast('⏳ Conferma in corso...');
   try{
     const docId = reqId + '_' + candidatoUid;
@@ -5220,17 +5265,18 @@ async function accettaSlot(reqId, candidatoUid, candidatoNome, slot){
     toast('\u2705 Appuntamento confermato con ' + candidatoNome + '!');
     window._candidatureRicevute = null;
     buildIncarichiView('richieste');
-  } catch(e){ toast('\u274c Errore: '+e.message); }
+  } catch(e){ toast('\u274c Errore: '+e.message); } finally { if(btnEl) btnEl.disabled = false; }
 }
 
-async function rifiutaCandidatura(reqId, candidatoUid){
+async function rifiutaCandidatura(btnEl, reqId, candidatoUid){
+  if(btnEl) btnEl.disabled = true;
   try{
     const docId = reqId + '_' + candidatoUid;
     await callCF('/aggiornaCandidatura', { docId, stato:'rifiutata' });
     toast('Candidatura rifiutata');
     window._candidatureRicevute = null;
     buildIncarichiView('richieste');
-  } catch(e){ toast('\u274c Errore: '+e.message); }
+  } catch(e){ toast('\u274c Errore: '+e.message); } finally { if(btnEl) btnEl.disabled = false; }
 }
 </script>
 <!-- MODALE CONFERMA CUSTOM -->
