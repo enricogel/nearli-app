@@ -3321,6 +3321,7 @@ const ricaricaMetodi=[
   {id:'google',icon:'google',label:'Google Pay',sub:'Istantaneo'},
 ];
 let selRicarica=null;
+window._ricaricaIdempotencyKey = null;
 function openRicaricaModal(){
   selRicarica=null;
   document.getElementById('ricarica-body').innerHTML=`
@@ -3356,6 +3357,9 @@ function doRicarica(){
   if(!imp || imp < 5){ toast('⚠️ Importo minimo €5'); return; }
   if(!currentUser){ toast('⚠️ Effettua il login prima'); return; }
 
+  // Nuovo tentativo di ricarica: chiave di idempotenza fresca per Stripe.
+  window._ricaricaIdempotencyKey = crypto.randomUUID();
+
   // Mostra campo carta Stripe
   const body = document.getElementById('ricarica-body');
   body.innerHTML = `
@@ -3365,7 +3369,7 @@ function doRicarica(){
     <div id="stripe-error" style="color:#f87171;font-size:12px;margin-bottom:12px;display:none;"></div>
     <div class="info-box green" style="margin-bottom:14px;">🔒 Pagamento sicuro via Stripe</div>
     <button class="btn btn-primary" id="stripe-confirm-btn" onclick="doRicaricaConferma(${imp})">↓ Paga €${fmt(imp)}</button>
-    <button class="btn btn-ghost" onclick="openRicaricaModal()">← Indietro</button>`;
+    <button class="btn btn-ghost" onclick="window._ricaricaIdempotencyKey=null;openRicaricaModal()">← Indietro</button>`;
 
   // Monta elemento carta
   const stripe = getStripe();
@@ -3402,10 +3406,14 @@ async function doRicaricaConferma(imp){
     }
 
     const token = await user.getIdToken();
+    // Fallback di sicurezza: se per qualche motivo la chiave non fosse ancora
+    // stata generata a questo punto (es. init edge case), la generiamo al
+    // volo invece di mandare undefined a Stripe.
+    if(!window._ricaricaIdempotencyKey){ window._ricaricaIdempotencyKey = crypto.randomUUID(); }
     const res = await fetch('https://us-central1-appaiutomappa-d595e.cloudfunctions.net/creaPaymentIntent', {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-      body: JSON.stringify({data:{importoCent: Math.round(imp*100)}})
+      body: JSON.stringify({data:{importoCent: Math.round(imp*100), idempotencyKey: window._ricaricaIdempotencyKey}})
     });
     const result = await res.json();
     if(result.error){ throw new Error(result.error.message); }
@@ -3423,6 +3431,10 @@ async function doRicaricaConferma(imp){
     });
     const result2 = await res2.json();
     if(result2.error){ throw new Error(result2.error.message); }
+    // Ricarica confermata: azzerata solo ora, non prima, così un eventuale
+    // fallimento/errore di confermaRicarica lascia la chiave valorizzata per
+    // il retry (creaPaymentIntent la riuserebbe restando idempotente).
+    window._ricaricaIdempotencyKey = null;
 
     walletData.saldo += imp;
     walletData.movimenti.unshift({id:'r'+Date.now(),tipo:'ricarica',desc:'Ricarica wallet',importo:+imp,data:'Oggi',dataISO:new Date().toISOString().split('T')[0],stato:'completato'});
